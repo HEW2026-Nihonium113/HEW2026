@@ -406,7 +406,9 @@ int32_t Format::bpp() const noexcept
     case DXGI_FORMAT_B5G5R5A1_UNORM:
     case DXGI_FORMAT_A8P8:
     case DXGI_FORMAT_B4G4R4A4_UNORM:
+#if defined(DXGI_FORMAT_A4B4G4R4_UNORM)
     case DXGI_FORMAT_A4B4G4R4_UNORM:
+#endif
         return 16;
 
     // 32-bit formats
