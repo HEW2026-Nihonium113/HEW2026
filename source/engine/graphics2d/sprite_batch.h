@@ -83,7 +83,6 @@ public:
     void Draw(
         Texture* texture,
         const Vector2& position,
-        const SpriteRect* sourceRect = nullptr,
         const Color& color = Colors::White,
         float rotation = 0.0f,
         const Vector2& origin = Vector2::Zero,
