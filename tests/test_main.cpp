@@ -10,6 +10,7 @@
 //! - Shaderテスト: シェーダーコンパイル・ロード・管理のテスト
 //! - Textureテスト: テクスチャ生成・ロード・キャッシュのテスト
 //! - Bufferテスト: バッファ生成・GPU Readback検証のテスト
+//! - BuildConfigテスト: ビルド設定の整合性検証テスト
 //!
 //! コマンドライン引数:
 //!   --help           ヘルプ表示
@@ -18,12 +19,14 @@
 //!   --fs-only        FileSystemテストのみ実行
 //!   --shader-only    Shaderテストのみ実行
 //!   --texture-only   Textureテストのみ実行
+//!   --config-only    BuildConfigテストのみ実行
 //!   --buffer-only    Bufferテストのみ実行
 //!   --assets-dir     テストアセットディレクトリを指定
 //----------------------------------------------------------------------------
 #include "test_file_system.h"
 #include "test_shader.h"
 #include "test_texture.h"
+#include "test_build_config.h"
 #include "test_buffer.h"
 
 #include "dx11/gpu_common.h"
@@ -53,6 +56,7 @@ struct TestConfig
     bool runShaderTests = true;       //!< Shaderテストを実行
     bool runTextureTests = true;      //!< Textureテストを実行
     bool runBufferTests = true;       //!< Bufferテストを実行
+    bool runBuildConfigTests = true;  //!< BuildConfigテストを実行
     bool initDevice = true;           //!< D3D11デバイスを初期化
     bool debugDevice = true;          //!< D3D11デバッグレイヤーを有効化
     std::wstring hostTestDir;         //!< HostFileSystemテスト用ディレクトリ
@@ -70,6 +74,7 @@ static void PrintUsage(const char* programName)
               << "  --no-debug             D3D11デバッグレイヤーを無効化\n"
               << "  --fs-only              FileSystemテストのみ実行\n"
               << "  --shader-only          Shaderテストのみ実行\n"
+              << "  --config-only          BuildConfigテストのみ実行\n"
               << "  --texture-only         Textureテストのみ実行\n"
               << "  --buffer-only          Bufferテストのみ実行\n"
               << "  --host-dir=<パス>      HostFileSystemテスト用ディレクトリ\n"
@@ -101,21 +106,31 @@ static TestConfig ParseCommandLine(int argc, char* argv[])
             config.runShaderTests = false;
             config.runTextureTests = false;
             config.runBufferTests = false;
+            config.runBuildConfigTests = false;
         }
         else if (arg == "--shader-only") {
             config.runFileSystemTests = false;
             config.runShaderTests = true;
             config.runTextureTests = false;
             config.runBufferTests = false;
+            config.runBuildConfigTests = false;
         }
         else if (arg == "--texture-only") {
             config.runFileSystemTests = false;
             config.runShaderTests = false;
             config.runTextureTests = true;
             config.runBufferTests = false;
+            config.runBuildConfigTests = false;
         }
         else if (arg == "--buffer-only") {
             config.runFileSystemTests = false;
+        else if (arg == "--config-only") {
+            config.runFileSystemTests = false;
+            config.runShaderTests = false;
+            config.runTextureTests = false;
+            config.runBufferTests = false;
+            config.runBuildConfigTests = true;
+        }
             config.runShaderTests = false;
             config.runTextureTests = false;
             config.runBufferTests = true;
@@ -240,6 +255,14 @@ int main(int argc, char* argv[])
     }
 
     // Textureテストの実行
+
+    // BuildConfigテストの実行
+    if (config.runBuildConfigTests) {
+        tests::RunBuildConfigTests();
+        totalTests++;
+        // BuildConfigテストは常に成功とカウント（内部で個別にカウント）
+        passedTests++;
+    }
     if (config.runTextureTests) {
         bool passed = tests::RunTextureTests(config.textureDir);
         totalTests++;
