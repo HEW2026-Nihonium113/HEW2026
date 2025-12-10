@@ -10,7 +10,7 @@ goto %~1
 
 :check_project
     if not exist "build\HEW2026.sln" (
-        echo Project not found. Run @make_project.cmd first.
+        echo プロジェクトが見つかりません。先に @make_project.cmd を実行してください。
         exit /b 1
     )
     exit /b 0
@@ -18,14 +18,14 @@ goto %~1
 :setup_msbuild
     set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
     if not exist "%VSWHERE%" (
-        echo [ERROR] vswhere.exe not found. Please install Visual Studio 2022.
+        echo [ERROR] vswhere.exe が見つかりません。Visual Studio 2022 をインストールしてください。
         exit /b 1
     )
     for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -requires Microsoft.Component.MSBuild -find Common7\Tools\VsDevCmd.bat`) do (
         set "VSCMD_PATH=%%i"
     )
     if not defined VSCMD_PATH (
-        echo [ERROR] Visual Studio not found
+        echo [ERROR] Visual Studio が見つかりません
         exit /b 1
     )
     call "%VSCMD_PATH%" -arch=amd64 >nul 2>&1
@@ -34,14 +34,14 @@ goto %~1
 :find_msbuild_exe
     set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
     if not exist "%VSWHERE%" (
-        echo [ERROR] vswhere.exe not found. Please install Visual Studio 2022.
+        echo [ERROR] vswhere.exe が見つかりません。Visual Studio 2022 をインストールしてください。
         exit /b 1
     )
     for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do (
         set "MSBUILD_PATH=%%i"
     )
     if not defined MSBUILD_PATH (
-        echo [ERROR] MSBuild not found. Please install Visual Studio 2022 with C++ workload.
+        echo [ERROR] MSBuild が見つかりません。Visual Studio 2022 の C++ ワークロードをインストールしてください。
         exit /b 1
     )
     exit /b 0
@@ -56,8 +56,8 @@ goto %~1
     popd
     rmdir "%TEMP%\%GUID%"
     if %PREMAKE_RESULT% neq 0 (
-        echo [ERROR] Project generation failed
+        echo [ERROR] プロジェクト生成に失敗しました
         exit /b 1
     )
-    echo [OK] build\HEW2026.sln generated
+    echo [OK] build\HEW2026.sln を生成しました
     exit /b 0
