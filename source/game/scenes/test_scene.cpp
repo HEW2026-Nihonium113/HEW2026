@@ -22,10 +22,10 @@ void TestScene::OnEnter()
     float width = static_cast<float>(window->GetWidth());
     float height = static_cast<float>(window->GetHeight());
 
-    // カメラ作成
+    // カメラ作成（Transform2D必須）
     cameraObj_ = std::make_unique<GameObject>("MainCamera");
+    cameraObj_->AddComponent<Transform2D>(Vector2(width * 0.5f, height * 0.5f));
     camera_ = cameraObj_->AddComponent<Camera2D>(width, height);
-    camera_->SetPosition(Vector2(width * 0.5f, height * 0.5f));
 
     // テスト用白テクスチャを作成（32x32）
     std::vector<uint32_t> whitePixels(32 * 32, 0xFFFFFFFF);
