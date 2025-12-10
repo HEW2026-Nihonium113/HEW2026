@@ -51,14 +51,22 @@ source/
 
 ## 開発の流れ
 
+### プログラマー向け（コード変更）
+
 **masterへの直接pushは禁止されています。** 必ずPR（Pull Request）を作成してください。
 
-### 1. ブランチを作成
-
 ```bash
+# 1. masterから作業ブランチを作成
 git checkout master
 git pull
 git checkout -b feature/作業内容
+
+# 2. 作業してコミット
+git add .
+git commit -m "変更内容を日本語で書く"
+
+# 3. pushしてPR作成
+git push -u origin feature/作業内容
 ```
 
 ブランチ名の例：
@@ -66,34 +74,28 @@ git checkout -b feature/作業内容
 - `fix/collision-bug` - バグ修正
 - `refactor/shader-manager` - リファクタリング
 
-### 2. 作業してコミット
+**PR作成後の流れ：**
+1. **CodeRabbit** が自動でコードレビュー
+2. チームメンバーがレビューを確認して **Approve**
+3. マージ（作業ブランチは自動削除）
+4. ローカルのmasterを更新：`git checkout master && git pull`
+
+### デザイナー向け（アセット追加）
+
+`assets` ブランチには直接pushできます。
 
 ```bash
-git add .
-git commit -m "変更内容を日本語で書く"
-```
-
-### 3. pushしてPR作成
-
-```bash
-git push -u origin feature/作業内容
-```
-
-pushしたらGitHubでPRを作成：
-1. [リポジトリ](https://github.com/HEW2026-Nihonium113/HEW2026) にアクセス
-2. 「Compare & pull request」ボタンをクリック
-3. タイトルと説明を書いて「Create pull request」
-
-### 4. レビュー → マージ
-
-- **CodeRabbit**が自動でコードレビューします
-- 問題なければマージしてください
-- マージ後、ローカルのmasterを更新：
-
-```bash
-git checkout master
+# assetsブランチに切り替え
+git checkout assets
 git pull
+
+# アセットを追加してpush
+git add .
+git commit -m "テクスチャ追加"
+git push
 ```
+
+※ `assets` ブランチは定期的にmasterへマージされます。
 
 ## チーム
 
