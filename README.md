@@ -80,7 +80,7 @@ git push -u origin feature/作業内容
 ```
 
 pushしたらGitHubでPRを作成：
-1. https://github.com/HEW2026-Nihonium113/HEW2026 にアクセス
+1. [リポジトリ](https://github.com/HEW2026-Nihonium113/HEW2026) にアクセス
 2. 「Compare & pull request」ボタンをクリック
 3. タイトルと説明を書いて「Create pull request」
 
