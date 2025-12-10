@@ -1,7 +1,5 @@
-# ビルド成果物
+# ビルド成果物 (build/配下にbin/とobj/も含む)
 build/
-bin/
-obj/
 
 # Visual Studio
 *.user

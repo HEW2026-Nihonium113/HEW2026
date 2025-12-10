@@ -27,7 +27,7 @@ cd HEW2026
 @make_project.cmd
 
 # 実行
-bin\Debug-windows-x64\game\game.exe
+build\bin\Debug-windows-x86_64\game\game.exe
 ```
 
 ### その他のコマンド
