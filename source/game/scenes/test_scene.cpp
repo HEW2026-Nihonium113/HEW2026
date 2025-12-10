@@ -17,8 +17,8 @@
 //----------------------------------------------------------------------------
 void TestScene::OnEnter()
 {
-    auto& app = Application::Get();
-    auto* window = app.GetWindow();
+    Application& app = Application::Get();
+    Window* window = app.GetWindow();
     float width = static_cast<float>(window->GetWidth());
     float height = static_cast<float>(window->GetHeight());
 
@@ -48,7 +48,7 @@ void TestScene::OnEnter()
     playerSprite_->SetColor(Color(0.2f, 1.0f, 0.2f, 1.0f));  // 緑
 
     // プレイヤーにコライダー追加
-    auto* playerCollider = player_->AddComponent<Collider2D>(Vector2(64, 64));
+    Collider2D* playerCollider = player_->AddComponent<Collider2D>(Vector2(64, 64));
     playerCollider->SetLayer(0x01);  // プレイヤーレイヤー
     playerCollider->SetMask(0x02);   // 障害物と衝突
 
@@ -69,18 +69,18 @@ void TestScene::OnEnter()
     // 障害物を複数作成（赤色、静止）
     const float spacing = 150.0f;
     for (int i = 0; i < 5; ++i) {
-        auto obj = std::make_unique<GameObject>("Obstacle" + std::to_string(i));
+        std::unique_ptr<GameObject> obj = std::make_unique<GameObject>("Obstacle" + std::to_string(i));
 
-        auto* transform = obj->AddComponent<Transform2D>();
+        Transform2D* transform = obj->AddComponent<Transform2D>();
         transform->SetPosition(Vector2(200.0f + i * spacing, 200.0f));
         transform->SetScale(2.0f);
 
-        auto* sprite = obj->AddComponent<SpriteRenderer>();
+        SpriteRenderer* sprite = obj->AddComponent<SpriteRenderer>();
         sprite->SetTexture(testTexture_.get());
         sprite->SetColor(Color(1.0f, 0.3f, 0.3f, 1.0f));  // 赤
 
         // 障害物にコライダー追加
-        auto* collider = obj->AddComponent<Collider2D>(Vector2(64, 64));
+        Collider2D* collider = obj->AddComponent<Collider2D>(Vector2(64, 64));
         collider->SetLayer(0x02);  // 障害物レイヤー
         collider->SetMask(0x01);   // プレイヤーと衝突
 
@@ -89,17 +89,17 @@ void TestScene::OnEnter()
 
     // 下段にも障害物
     for (int i = 0; i < 5; ++i) {
-        auto obj = std::make_unique<GameObject>("Obstacle" + std::to_string(i + 5));
+        std::unique_ptr<GameObject> obj = std::make_unique<GameObject>("Obstacle" + std::to_string(i + 5));
 
-        auto* transform = obj->AddComponent<Transform2D>();
+        Transform2D* transform = obj->AddComponent<Transform2D>();
         transform->SetPosition(Vector2(275.0f + i * spacing, 400.0f));
         transform->SetScale(2.0f);
 
-        auto* sprite = obj->AddComponent<SpriteRenderer>();
+        SpriteRenderer* sprite = obj->AddComponent<SpriteRenderer>();
         sprite->SetTexture(testTexture_.get());
         sprite->SetColor(Color(0.3f, 0.3f, 1.0f, 1.0f));  // 青
 
-        auto* collider = obj->AddComponent<Collider2D>(Vector2(64, 64));
+        Collider2D* collider = obj->AddComponent<Collider2D>(Vector2(64, 64));
         collider->SetLayer(0x02);
         collider->SetMask(0x01);
 
@@ -130,10 +130,10 @@ void TestScene::Update()
     float dt = Application::Get().GetDeltaTime();
     time_ += dt;
 
-    auto* inputMgr = InputManager::GetInstance();
+    InputManager* inputMgr = InputManager::GetInstance();
     if (!inputMgr) return;
 
-    auto& keyboard = inputMgr->GetKeyboard();
+    Keyboard& keyboard = inputMgr->GetKeyboard();
 
     // プレイヤー操作（WASD）
     const float speed = 300.0f;
@@ -151,7 +151,7 @@ void TestScene::Update()
     player_->Update(dt);
 
     // 障害物更新
-    for (auto& obj : objects_) {
+    for (std::unique_ptr<GameObject>& obj : objects_) {
         obj->Update(dt);
     }
 
@@ -162,8 +162,8 @@ void TestScene::Update()
 //----------------------------------------------------------------------------
 void TestScene::Render()
 {
-    auto& ctx = GraphicsContext::Get();
-    auto& renderer = Renderer::Get();
+    GraphicsContext& ctx = GraphicsContext::Get();
+    Renderer& renderer = Renderer::Get();
 
     Texture* backBuffer = renderer.GetBackBuffer();
     if (!backBuffer) return;
@@ -178,14 +178,14 @@ void TestScene::Render()
     ctx.ClearRenderTarget(backBuffer, clearColor);
 
     // SpriteBatchで描画
-    auto& spriteBatch = SpriteBatch::Get();
+    SpriteBatch& spriteBatch = SpriteBatch::Get();
     spriteBatch.SetCamera(*camera_);
     spriteBatch.Begin();
 
     // 障害物描画
-    for (auto& obj : objects_) {
-        auto* transform = obj->GetComponent<Transform2D>();
-        auto* sprite = obj->GetComponent<SpriteRenderer>();
+    for (std::unique_ptr<GameObject>& obj : objects_) {
+        Transform2D* transform = obj->GetComponent<Transform2D>();
+        SpriteRenderer* sprite = obj->GetComponent<SpriteRenderer>();
         if (transform && sprite) {
             spriteBatch.Draw(*sprite, *transform);
         }
