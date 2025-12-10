@@ -150,6 +150,9 @@ void TestScene::Update()
     // プレイヤー更新（Collider2D::Updateが呼ばれる）
     player_->Update(dt);
 
+    // カメラがプレイヤーを追従
+    camera_->Follow(playerTransform_->GetPosition(), 0.1f);
+
     // 障害物更新
     for (std::unique_ptr<GameObject>& obj : objects_) {
         obj->Update(dt);
