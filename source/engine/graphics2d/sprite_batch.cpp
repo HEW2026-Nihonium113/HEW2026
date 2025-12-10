@@ -171,7 +171,6 @@ void SpriteBatch::Begin() {
 void SpriteBatch::Draw(
     Texture* texture,
     const Vector2& position,
-    const SpriteRect* sourceRect,
     const Color& color,
     float rotation,
     const Vector2& origin,
@@ -193,29 +192,19 @@ void SpriteBatch::Draw(
     float texWidth = static_cast<float>(texture->Width());
     float texHeight = static_cast<float>(texture->Height());
 
-    // ソース矩形の設定
-    float srcX = 0.0f, srcY = 0.0f;
-    float srcW = texWidth, srcH = texHeight;
-    if (sourceRect && sourceRect->width > 0 && sourceRect->height > 0) {
-        srcX = sourceRect->x;
-        srcY = sourceRect->y;
-        srcW = sourceRect->width;
-        srcH = sourceRect->height;
-    }
-
-    // UV座標
-    float u0 = srcX / texWidth;
-    float v0 = srcY / texHeight;
-    float u1 = (srcX + srcW) / texWidth;
-    float v1 = (srcY + srcH) / texHeight;
+    // UV座標（テクスチャ全体を使用）
+    float u0 = 0.0f;
+    float v0 = 0.0f;
+    float u1 = 1.0f;
+    float v1 = 1.0f;
 
     // 反転
     if (flipX) std::swap(u0, u1);
     if (flipY) std::swap(v0, v1);
 
     // スプライトサイズ
-    float width = srcW * scale.x;
-    float height = srcH * scale.y;
+    float width = texWidth * scale.x;
+    float height = texHeight * scale.y;
 
     // 4頂点の計算（原点を考慮）
     float x0 = -origin.x * scale.x;
@@ -257,21 +246,15 @@ void SpriteBatch::Draw(const SpriteRenderer& renderer, const Transform2D& transf
         return;
     }
 
-    auto* texture = renderer.GetTexture();
-    const auto& srcRect = renderer.GetSourceRect();
-    const SpriteRect* srcRectPtr = (srcRect.width > 0 && srcRect.height > 0) ? &srcRect : nullptr;
+    Texture* texture = renderer.GetTexture();
 
-    // サイズ決定
+    // サイズ決定（カスタムサイズまたはテクスチャサイズ）
     Vector2 size = renderer.GetSize();
     if (size.x <= 0 || size.y <= 0) {
-        if (srcRectPtr) {
-            size = Vector2(srcRect.width, srcRect.height);
-        } else {
-            size = Vector2(
-                static_cast<float>(texture->Width()),
-                static_cast<float>(texture->Height())
-            );
-        }
+        size = Vector2(
+            static_cast<float>(texture->Width()),
+            static_cast<float>(texture->Height())
+        );
     }
 
     // Transform2Dからパラメータ取得
@@ -280,7 +263,7 @@ void SpriteBatch::Draw(const SpriteRenderer& renderer, const Transform2D& transf
     Vector2 scale = transform.GetScale();
     Vector2 pivot = transform.GetPivot();
 
-    Draw(texture, position, srcRectPtr, renderer.GetColor(),
+    Draw(texture, position, renderer.GetColor(),
          rotation, pivot, scale,
          renderer.IsFlipX(), renderer.IsFlipY(),
          renderer.GetSortingLayer(), renderer.GetOrderInLayer());
