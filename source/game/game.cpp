@@ -12,6 +12,7 @@
 #include "engine/input/input_manager.h"
 #include "common/logging/logging.h"
 #include "engine/scene/scene_manager.h"
+#include "engine/collision/collision_manager.h"
 
 #include "scenes/test_scene.h"
 
@@ -33,7 +34,10 @@ bool Game::Initialize()
         return false;
     }
 
-    // 2. ファイルシステムマウント
+    // 2. CollisionManager初期化
+    CollisionManager::Get().Initialize(256);
+
+    // 3. ファイルシステムマウント
     auto& fsManager = FileSystemManager::Get();
     fsManager.Mount("shaders", std::make_unique<HostFileSystem>(L"assets/shader/"));
     fsManager.Mount("textures", std::make_unique<HostFileSystem>(L"assets/texture/"));
@@ -72,6 +76,7 @@ void Game::Shutdown() noexcept
     ShaderManager::Get().Shutdown();
     TextureManager::Get().Shutdown();
     FileSystemManager::Get().UnmountAll();
+    CollisionManager::Get().Shutdown();
     InputManager::Uninit();
     g_shaderCompiler.reset();
 

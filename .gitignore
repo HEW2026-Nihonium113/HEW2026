@@ -1,5 +1,7 @@
-# ビルド成果物 (build/配下にbin/とobj/も含む)
+# ビルド成果物
 build/
+bin/
+obj/
 
 # Visual Studio
 *.user
@@ -17,3 +19,6 @@ build/
 
 # Claude Code設定
 CLAUDE.md
+
+#gemini cli設定
+GEMINI.md
