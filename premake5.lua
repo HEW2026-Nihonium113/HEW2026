@@ -34,8 +34,10 @@ workspace "HEW2026"
 
     filter {}
 
--- 出力ディレクトリ
+-- 出力ディレクトリ (build/配下に統一)
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+bindir = "build/bin/" .. outputdir
+objdir_base = "build/obj/" .. outputdir
 
 --============================================================================
 -- 外部ライブラリ
@@ -48,8 +50,8 @@ project "DirectXTex"
     cppdialect "C++17"
     location "build/DirectXTex"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "external/DirectXTex/DirectXTex/*.h",
@@ -93,8 +95,8 @@ project "DirectXTK"
     cppdialect "C++17"
     location "build/DirectXTK"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "external/DirectXTK/Inc/*.h",
@@ -146,8 +148,8 @@ project "dx11"
     kind "StaticLib"
     location "build/dx11"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "source/dx11/**.h",
@@ -198,8 +200,8 @@ project "engine"
     kind "StaticLib"
     location "build/engine"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "source/engine/**.h",
@@ -233,8 +235,8 @@ project "game"
     kind "WindowedApp"
     location "build/game"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "source/game/**.h",
@@ -276,8 +278,8 @@ project "tests"
     kind "ConsoleApp"
     location "build/tests"
 
-    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
-    objdir ("obj/" .. outputdir .. "/%{prj.name}")
+    targetdir (bindir .. "/%{prj.name}")
+    objdir (objdir_base .. "/%{prj.name}")
 
     files {
         "tests/**.h",
