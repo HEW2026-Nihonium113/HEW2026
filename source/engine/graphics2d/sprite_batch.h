@@ -93,7 +93,7 @@ public:
     void Draw(const SpriteRenderer& renderer, const Transform2D& transform);
 
     //------------------------------------------------------------------------
-    //! @brief SpriteRenderer + Animatorから描画（スプライトシートアニメーション）
+    //! @brief SpriteRenderer + Animator から描画（スプライトシートアニメーション）
     //------------------------------------------------------------------------
     void Draw(const SpriteRenderer& renderer, const Transform2D& transform, const Animator& animator);
 
