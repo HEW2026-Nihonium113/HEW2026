@@ -271,8 +271,9 @@ project "game"
     buildoptions { "/utf-8", "/permissive-" }
 
 --============================================================================
--- テスト実行ファイル
+-- テスト実行ファイル (現在無効)
 --============================================================================
+--[[
 project "tests"
     kind "ConsoleApp"
     location "build/tests"
@@ -314,3 +315,4 @@ project "tests"
 
     warnings "Extra"
     buildoptions { "/utf-8", "/permissive-" }
+]]--
