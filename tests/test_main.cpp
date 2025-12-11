@@ -19,12 +19,14 @@
 //!   --shader-only    Shaderテストのみ実行
 //!   --texture-only   Textureテストのみ実行
 //!   --buffer-only    Bufferテストのみ実行
+              << "  --spritebatch-only     SpriteBatchテストのみ実行\n"
 //!   --assets-dir     テストアセットディレクトリを指定
 //----------------------------------------------------------------------------
 #include "test_file_system.h"
 #include "test_shader.h"
 #include "test_texture.h"
 #include "test_buffer.h"
+#include "test_sprite_batch.h"
 
 #include "dx11/gpu_common.h"
 #include "dx11/graphics_device.h"
@@ -53,6 +55,7 @@ struct TestConfig
     bool runShaderTests = true;       //!< Shaderテストを実行
     bool runTextureTests = true;      //!< Textureテストを実行
     bool runBufferTests = true;       //!< Bufferテストを実行
+    bool runSpriteBatchTests = true;   //!< SpriteBatchテストを実行
     bool initDevice = true;           //!< D3D11デバイスを初期化
     bool debugDevice = true;          //!< D3D11デバッグレイヤーを有効化
     std::wstring hostTestDir;         //!< HostFileSystemテスト用ディレクトリ
@@ -72,6 +75,7 @@ static void PrintUsage(const char* programName)
               << "  --shader-only          Shaderテストのみ実行\n"
               << "  --texture-only         Textureテストのみ実行\n"
               << "  --buffer-only          Bufferテストのみ実行\n"
+              << "  --spritebatch-only     SpriteBatchテストのみ実行\n"
               << "  --host-dir=<パス>      HostFileSystemテスト用ディレクトリ\n"
               << "  --texture-dir=<パス>   テストテクスチャを含むディレクトリ\n"
               << "  --assets-dir=<パス>    テストアセットディレクトリ\n"
@@ -119,6 +123,14 @@ static TestConfig ParseCommandLine(int argc, char* argv[])
             config.runShaderTests = false;
             config.runTextureTests = false;
             config.runBufferTests = true;
+            config.runSpriteBatchTests = false;
+        }
+        else if (arg == "--spritebatch-only") {
+            config.runFileSystemTests = false;
+            config.runShaderTests = false;
+            config.runTextureTests = false;
+            config.runBufferTests = false;
+            config.runSpriteBatchTests = true;
         }
         else if (arg.rfind("--host-dir=", 0) == 0) {
             std::string path = arg.substr(11);
@@ -246,9 +258,17 @@ int main(int argc, char* argv[])
         if (passed) passedTests++;
     }
 
+
     // Bufferテストの実行
     if (config.runBufferTests) {
         bool passed = tests::RunBufferTests();
+        totalTests++;
+        if (passed) passedTests++;
+    }
+
+    // SpriteBatchテストの実行
+    if (config.runSpriteBatchTests) {
+        bool passed = tests::RunSpriteBatchTests(config.assetsDir);
         totalTests++;
         if (passed) passedTests++;
     }
