@@ -75,9 +75,6 @@ bool SpriteBatch::Initialize() {
         return false;
     }
 
-    // デフォルトの正射影行列を設定
-    SetScreenSize(1280.0f, 720.0f);
-
     spriteQueue_.reserve(MaxSpritesPerBatch);
     sortIndices_.reserve(MaxSpritesPerBatch);
     initialized_ = true;
@@ -159,12 +156,6 @@ void SpriteBatch::Shutdown() {
 
     initialized_ = false;
     LOG_INFO("SpriteBatch: シャットダウン完了");
-}
-
-void SpriteBatch::SetScreenSize(float width, float height) {
-    // 左上が(0,0)、右下が(width, height)の2D座標系
-    Matrix ortho = Matrix::CreateOrthographicOffCenter(0.0f, width, height, 0.0f, 0.0f, 1.0f);
-    cbufferData_.viewProjection = ortho.Transpose();
 }
 
 void SpriteBatch::SetCamera(Camera2D& camera) {
