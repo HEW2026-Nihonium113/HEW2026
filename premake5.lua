@@ -40,10 +40,11 @@ bindir = "build/bin/" .. outputdir
 objdir_base = "build/obj/" .. outputdir
 
 --============================================================================
--- 外部ライブラリ（ビルド済みバイナリを使用）
+-- 外部ライブラリ（ビルド済みバイナリ + ヘッダーを使用）
 --============================================================================
--- DirectXTex と DirectXTK は external/lib/ にビルド済み.libを配置
--- ビルド時間短縮のため、ソースからのビルドは行わない
+-- DirectXTex と DirectXTK:
+--   - ヘッダー: external/include/ (DirectXTex.h, SimpleMath.h, SimpleMath.inl)
+--   - ライブラリ: external/lib/Debug/, external/lib/Release/
 
 --============================================================================
 -- dx11ライブラリ
@@ -68,8 +69,7 @@ project "dx11"
 
     includedirs {
         "source",
-        "external/DirectXTex/DirectXTex",
-        "external/DirectXTK/Inc"
+        "external/include"
     }
 
     -- ビルド済み外部ライブラリのパス
@@ -119,7 +119,7 @@ project "engine"
     includedirs {
         "source",
         "source/engine",
-        "external/DirectXTK/Inc"
+        "external/include"
     }
 
     -- ビルド済み外部ライブラリのパス
@@ -159,7 +159,7 @@ project "game"
     includedirs {
         "source",
         "source/engine",
-        "external/DirectXTK/Inc"
+        "external/include"
     }
 
     -- ビルド済み外部ライブラリのパス
