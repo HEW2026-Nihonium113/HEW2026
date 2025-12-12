@@ -6,6 +6,7 @@
 #include "engine/platform/application.h"
 #include "engine/fs/file_system_manager.h"
 #include "engine/fs/host_file_system.h"
+#include "engine/fs/path_utility.h"
 #include "engine/texture/texture_manager.h"
 #include "engine/shader/shader_manager.h"
 #include "dx11/compile/shader_compiler.h"
@@ -14,23 +15,9 @@
 #include "engine/scene/scene_manager.h"
 #include "engine/collision/collision_manager.h"
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include <filesystem>
-
 #include "scenes/test_scene.h"
 #include "dx11/graphics_context.h"
 #include "engine/graphics2d/sprite_batch.h"
-
-namespace {
-    //! @brief 実行ファイルのあるディレクトリを取得
-    std::wstring GetExecutableDirectory() {
-        wchar_t path[MAX_PATH];
-        GetModuleFileNameW(nullptr, path, MAX_PATH);
-        std::filesystem::path exePath(path);
-        return exePath.parent_path().wstring() + L"/";
-    }
-}
 
 // シェーダーコンパイラ（グローバルインスタンス）
 static std::unique_ptr<D3DShaderCompiler> g_shaderCompiler;
@@ -49,16 +36,14 @@ Game::Game()
 //----------------------------------------------------------------------------
 bool Game::Initialize()
 {
-    // 実行ファイルからの相対パス: build/bin/Debug-windows-x86_64/game/ → プロジェクトルート
-    std::wstring exeDir = GetExecutableDirectory();
+    std::wstring projectRoot = FileSystemManager::GetProjectRoot();
+    std::wstring assetsRoot = FileSystemManager::GetAssetsDirectory();
 
 #ifdef _DEBUG
     // コンソール+ファイルログを有効化
-    // プロジェクトルート/debug/ に保存
-    std::filesystem::path debugDir = std::filesystem::path(exeDir) / L"../../../../debug";
-    debugDir = std::filesystem::weakly_canonical(debugDir);
-    std::filesystem::create_directories(debugDir);
-    std::wstring logPath = debugDir.wstring() + L"/debug_log.txt";
+    std::wstring debugDir = PathUtility::normalizeW(projectRoot + L"debug");
+    FileSystemManager::CreateDirectories(debugDir);
+    std::wstring logPath = debugDir + L"debug_log.txt";
     g_fullLog.openFile(logPath);
     LogSystem::setOutput(&g_fullLog);
     LOG_INFO("=== ログ出力開始 ===");
@@ -74,14 +59,8 @@ bool Game::Initialize()
     CollisionManager::Get().Initialize(256);
 
     // 3. ファイルシステムマウント
-
-    // パスを正規化
-    std::filesystem::path assetsPath = std::filesystem::path(exeDir) / L"../../../../assets";
-    assetsPath = std::filesystem::weakly_canonical(assetsPath);
-    std::wstring assetsRoot = assetsPath.wstring() + L"/";
-
-    LOG_INFO("[Game] Exe directory: " + std::string(exeDir.begin(), exeDir.end()));
-    LOG_INFO("[Game] Assets root: " + std::string(assetsRoot.begin(), assetsRoot.end()));
+    LOG_INFO("[Game] Project root: " + PathUtility::toNarrowString(projectRoot));
+    LOG_INFO("[Game] Assets root: " + PathUtility::toNarrowString(assetsRoot));
 
     auto& fsManager = FileSystemManager::Get();
     fsManager.Mount("shaders", std::make_unique<HostFileSystem>(assetsRoot + L"shader/"));
