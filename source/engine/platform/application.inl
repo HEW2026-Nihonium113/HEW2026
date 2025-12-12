@@ -6,6 +6,7 @@
 
 #include "renderer.h"
 #include "common/logging/logging.h"
+#include <thread>
 
 //----------------------------------------------------------------------------
 template<typename TGame>
@@ -28,7 +29,13 @@ template<typename TGame>
 void Application::MainLoop(TGame& game)
 {
     Renderer& renderer = Renderer::Get();
+
+    // フレームレート制限（60FPS = 16.67ms per frame）
+    constexpr auto kTargetFrameTime = std::chrono::microseconds(16667);
+
     while (!shouldQuit_) {
+        auto frameStart = std::chrono::high_resolution_clock::now();
+
         // メッセージ処理
         if (!window_->ProcessMessages()) {
             break;  // WM_QUIT
@@ -63,5 +70,13 @@ void Application::MainLoop(TGame& game)
         game.EndFrame();
 
         ++frameCount_;
+
+        // フレームレート制限：目標時間に達するまで待機
+        auto frameEnd = std::chrono::high_resolution_clock::now();
+        auto elapsed = frameEnd - frameStart;
+        if (elapsed < kTargetFrameTime) {
+            auto sleepTime = kTargetFrameTime - elapsed;
+            std::this_thread::sleep_for(sleepTime);
+        }
     }
 }
