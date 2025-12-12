@@ -89,7 +89,7 @@ void TestScene::OnEnter()
         playerSprite_->SetPivotFromCenter(frameWidth, frameHeight, offsetX, offsetY);
     }
     playerAnimator_->SetRowFrameCount(0, 1, 12);  // Idle: 1フレーム、遅め
-    playerAnimator_->SetRowFrameCount(1, 4, 12);   // Walk: 4フレーム、普通
+    playerAnimator_->SetRowFrameCount(1, 4, 36);   // Walk: 4フレーム、普通
     playerAnimator_->SetRowFrameCount(2, 3, 20);   // Attack: 3フレーム、速め
     playerAnimator_->SetRowFrameCount(3, 2, 10);  // Death: 2フレーム、やや遅め
     playerAnimator_->SetRow(1);  // 初期はWalkアニメーション
@@ -174,6 +174,14 @@ void TestScene::Update()
 {
     float dt = Application::Get().GetDeltaTime();
     time_ += dt;
+
+    // デバッグ用にFPSを表示（1秒ごと）
+    static float fpsTimer = 0.0f;
+    fpsTimer += dt;
+    if (fpsTimer >= 1.0f) {
+        LOG_INFO("FPS: " + std::to_string(1.0f / dt));
+        fpsTimer = 0.0f;
+    }
 
     InputManager* inputMgr = InputManager::GetInstance();
     if (!inputMgr) return;
