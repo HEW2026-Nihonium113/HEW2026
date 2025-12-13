@@ -6,7 +6,7 @@
 #include "shader_program.h"
 #include "global_shader.h"
 #include "dx11/compile/shader_compiler.h"
-#include "dx11/compile/shader_cache.h"
+#include "shader_cache.h"
 #include "engine/fs/file_system.h"
 #include "dx11/graphics_device.h"
 #include "common/logging/logging.h"

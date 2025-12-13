@@ -65,8 +65,8 @@ void Animator::SetRow(uint8_t row)
 
 void Animator::SetRowFrameCount(uint8_t row, uint8_t frameCount)
 {
-    assert(row < rowCount_ && "SetRowFrameCount: row out of range");
-    assert(row < kMaxRows && "SetRowFrameCount: row exceeds kMaxRows");
+    assert(row < rowCount_ && "row（行）の番号/インデックスに、存在しない値（大きすぎる or 負の値）を渡している");
+    assert(row < kMaxRows && "SetRowFrameCount: 行が最大行数（kMaxRows）を超えています");
     if (row >= rowCount_ || row >= kMaxRows) return;
 
     // 0または列数を超える場合は「全列使用」として0を格納
@@ -79,8 +79,9 @@ void Animator::SetRowFrameCount(uint8_t row, uint8_t frameCount)
 
 uint8_t Animator::GetRowFrameCount(uint8_t row) const
 {
-    assert(row < rowCount_ && "GetRowFrameCount: row out of range");
-    assert(row < kMaxRows && "GetRowFrameCount: row exceeds kMaxRows");
+    assert(row < rowCount_ && "GetRowFrameCount: 行番号が有効範囲外です");
+    assert(row < kMaxRows   && "GetRowFrameCount: 行番号が最大行数(kMaxRows)を超えています");
+
     if (row >= rowCount_ || row >= kMaxRows) return colCount_;
 
     uint8_t limit = rowFrameCounts_[row];
@@ -95,8 +96,9 @@ void Animator::SetRowFrameCount(uint8_t row, uint8_t frameCount, uint8_t frameIn
 
 void Animator::SetRowFrameInterval(uint8_t row, uint8_t frameInterval)
 {
-    assert(row < rowCount_ && "SetRowFrameInterval: row out of range");
-    assert(row < kMaxRows && "SetRowFrameInterval: row exceeds kMaxRows");
+    assert(row < rowCount_ && "SetRowFrameInterval: 行番号が有効範囲外です");
+    assert(row < kMaxRows   && "SetRowFrameInterval: 行番号が最大行数(kMaxRows)を超えています");
+
     if (row >= rowCount_ || row >= kMaxRows) return;
 
     rowFrameIntervals_[row] = frameInterval;
@@ -104,7 +106,7 @@ void Animator::SetRowFrameInterval(uint8_t row, uint8_t frameInterval)
 
 uint8_t Animator::GetRowFrameInterval(uint8_t row) const
 {
-    assert(row < kMaxRows && "GetRowFrameInterval: row exceeds kMaxRows");
+    assert(row < kMaxRows && "GetRowFrameInterval: 行番号が最大行数(kMaxRows)を超えています");
     if (row >= kMaxRows) return frameInterval_;
 
     uint8_t interval = rowFrameIntervals_[row];
