@@ -176,15 +176,32 @@ private:
 //----------------------------------------------------------------------------
 class LogSystem {
 private:
-    static inline ILogOutput* output_ = nullptr;
     static inline LogLevel minLevel_ = LogLevel::Debug;
 
-public:
-    // ログ出力先を設定（nullptr可）
-    static void setOutput(ILogOutput* output) {
-        output_ = output;
+#ifdef _DEBUG
+    //! @brief ログ出力インスタンス取得（遅延初期化）
+    static FullLogOutput& GetOutput() {
+        static FullLogOutput instance = []() {
+            FullLogOutput out;
+            // カレントディレクトリにdebugフォルダを作成
+            wchar_t cwd[MAX_PATH];
+            GetCurrentDirectoryW(MAX_PATH, cwd);
+            std::wstring debugDir = std::wstring(cwd) + L"\\debug";
+            CreateDirectoryW(debugDir.c_str(), nullptr);
+            std::wstring logPath = debugDir + L"\\debug_log.txt";
+            out.openFile(logPath);
+            return out;
+        }();
+        return instance;
     }
+#else
+    static DebugLogOutput& GetOutput() {
+        static DebugLogOutput instance;
+        return instance;
+    }
+#endif
 
+public:
     // 最小ログレベルを設定
     static void setMinLevel(LogLevel level) {
         minLevel_ = level;
@@ -193,12 +210,6 @@ public:
     // ログ出力
     static void log(LogLevel level, const std::string& message, const std::source_location& loc = std::source_location::current()) {
         if (level < minLevel_) return;
-
-        // デフォルト出力先
-        if (!output_) {
-            static DebugLogOutput defaultOutput;
-            output_ = &defaultOutput;
-        }
 
         // フォーマット: [LEVEL] filename(line): message
         std::string levelStr;
@@ -220,7 +231,7 @@ public:
         snprintf(buffer, sizeof(buffer), "[%s] %s(%d): %s\n",
             levelStr.c_str(), filename.c_str(), loc.line(), message.c_str());
 
-        output_->write(level, std::string(buffer));
+        GetOutput().write(level, std::string(buffer));
     }
 };
 
