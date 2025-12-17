@@ -53,6 +53,36 @@ public:
             freopen_s(&fp, "CONOUT$", "w", stdout);
             freopen_s(&fp, "CONOUT$", "w", stderr);
             SetConsoleOutputCP(CP_UTF8);
+
+
+            //コンソール画面でのクイック編集モードの無効化
+            //ハンドル取得
+            HANDLE ConsoleHandle = GetStdHandle(STD_INPUT_HANDLE);
+            
+            //コンソールがない場合
+            if(ConsoleHandle == INVALID_HANDLE_VALUE)
+            {
+                return;
+            }
+            
+            DWORD ConsoleMode;
+            //コンソールモードの取得
+            if(!GetConsoleMode(ConsoleHandle,&ConsoleMode))
+            {
+                return;
+            }
+            
+            //ENABLE_QUICK_EDIT_MODEを取り除く
+            ConsoleMode &= ~ENABLE_QUICK_EDIT_MODE;
+
+            //ENABLE_EXTENDED_FLAGSを設定
+            ConsoleMode |= ENABLE_EXTENDED_FLAGS;
+
+            //コンソールモードの設定
+            if(!SetConsoleMode(ConsoleHandle,ConsoleMode))
+            {
+                return;
+            }
         }
     }
 
