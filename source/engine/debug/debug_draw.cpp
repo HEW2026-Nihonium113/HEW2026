@@ -8,6 +8,7 @@
 
 #include "engine/c_systems/sprite_batch.h"
 #include "engine/texture/texture_manager.h"
+#include <cmath>
 
 //----------------------------------------------------------------------------
 DebugDraw& DebugDraw::Get()
@@ -95,6 +96,33 @@ void DebugDraw::DrawRectFilled(
 
     batch.Draw(whiteTexture_.get(), Vector2(left, top), color, 0.0f,
         Vector2(0, 0), size, false, false, 100, 0);
+}
+
+//----------------------------------------------------------------------------
+void DebugDraw::DrawLine(
+    const Vector2& start,
+    const Vector2& end,
+    const Color& color,
+    float lineWidth)
+{
+    EnsureInitialized();
+    if (!whiteTexture_) return;
+
+    SpriteBatch& batch = SpriteBatch::Get();
+
+    Vector2 diff = end - start;
+    float length = diff.Length();
+    if (length < 0.001f) return;
+
+    // 角度計算
+    float angle = std::atan2(diff.y, diff.x);
+
+    // 線の中心位置
+    Vector2 center = (start + end) * 0.5f;
+
+    // 回転付きで描画
+    batch.Draw(whiteTexture_.get(), center, color, angle,
+        Vector2(0.5f, 0.5f), Vector2(length, lineWidth), false, false, 100, 0);
 }
 
 #endif // _DEBUG

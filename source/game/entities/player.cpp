@@ -1,0 +1,188 @@
+//----------------------------------------------------------------------------
+//! @file   player.cpp
+//! @brief  Playerクラス実装
+//----------------------------------------------------------------------------
+#include "player.h"
+#include "engine/input/input_manager.h"
+#include "engine/texture/texture_manager.h"
+#include "engine/c_systems/sprite_batch.h"
+#include "common/logging/logging.h"
+
+//----------------------------------------------------------------------------
+Player::Player()
+{
+}
+
+//----------------------------------------------------------------------------
+Player::~Player()
+{
+    Shutdown();
+}
+
+//----------------------------------------------------------------------------
+void Player::Initialize(const Vector2& position)
+{
+    // テクスチャロード（エルフスプライトを使用）
+    texture_ = TextureManager::Get().LoadTexture2D("elf_sprite.png");
+
+    // GameObject作成
+    gameObject_ = std::make_unique<GameObject>("Player");
+
+    // Transform
+    transform_ = gameObject_->AddComponent<Transform2D>();
+    transform_->SetPosition(position);
+    transform_->SetScale(0.3f);
+
+    // SpriteRenderer
+    sprite_ = gameObject_->AddComponent<SpriteRenderer>();
+    sprite_->SetTexture(texture_.get());
+    sprite_->SetSortingLayer(20);  // 他より手前
+
+    // Animator
+    animator_ = gameObject_->AddComponent<Animator>(kAnimRows, kAnimCols, 6);
+
+    // Pivot設定
+    if (texture_) {
+        float frameWidth = static_cast<float>(texture_->Width()) / kAnimCols;
+        float frameHeight = static_cast<float>(texture_->Height()) / kAnimRows;
+        sprite_->SetPivotFromCenter(frameWidth, frameHeight, 0.0f, 0.0f);
+    }
+
+    // アニメーション設定
+    animator_->SetRowFrameCount(0, 1, 12);   // Idle: 1フレーム
+    animator_->SetRowFrameCount(1, 4, 6);    // Walk: 4フレーム
+    animator_->SetRowFrameCount(2, 3, 8);    // Attack: 3フレーム（未使用）
+    animator_->SetRowFrameCount(3, 2, 10);   // Death: 2フレーム
+    animator_->SetRow(0);  // 初期はIdle
+
+    // Collider
+    collider_ = gameObject_->AddComponent<Collider2D>();
+    collider_->SetBounds(Vector2(-20, -30), Vector2(20, 30));
+    collider_->SetLayer(0x01);  // プレイヤーレイヤー
+    collider_->SetMask(0x02);   // 敵レイヤーと衝突
+
+    LOG_INFO("[Player] Initialized");
+}
+
+//----------------------------------------------------------------------------
+void Player::Shutdown()
+{
+    gameObject_.reset();
+    transform_ = nullptr;
+    sprite_ = nullptr;
+    animator_ = nullptr;
+    collider_ = nullptr;
+    texture_.reset();
+}
+
+//----------------------------------------------------------------------------
+void Player::Update(float dt, Camera2D& camera)
+{
+    HandleInput(dt, camera);
+
+    if (gameObject_) {
+        gameObject_->Update(dt);
+    }
+}
+
+//----------------------------------------------------------------------------
+void Player::HandleInput(float dt, Camera2D& /*camera*/)
+{
+    InputManager* inputMgr = InputManager::GetInstance();
+    if (!inputMgr || !transform_) return;
+
+    Keyboard& keyboard = inputMgr->GetKeyboard();
+
+    // 移動入力
+    Vector2 move = Vector2::Zero;
+    if (keyboard.IsKeyPressed(Key::W)) move.y -= moveSpeed_ * dt;
+    if (keyboard.IsKeyPressed(Key::S)) move.y += moveSpeed_ * dt;
+    if (keyboard.IsKeyPressed(Key::A)) move.x -= moveSpeed_ * dt;
+    if (keyboard.IsKeyPressed(Key::D)) move.x += moveSpeed_ * dt;
+
+    // 移動処理
+    bool wasMoving = isMoving_;
+    isMoving_ = (move.x != 0.0f || move.y != 0.0f);
+
+    if (isMoving_) {
+        transform_->Translate(move);
+
+        // 左右反転
+        if (animator_) {
+            if (move.x < 0.0f) {
+                animator_->SetMirror(false);
+            } else if (move.x > 0.0f) {
+                animator_->SetMirror(true);
+            }
+        }
+    }
+
+    // アニメーション切り替え
+    if (animator_) {
+        if (isMoving_ && !wasMoving) {
+            animator_->SetRow(1);  // Walk
+        } else if (!isMoving_ && wasMoving) {
+            animator_->SetRow(0);  // Idle
+        }
+    }
+}
+
+//----------------------------------------------------------------------------
+void Player::Render(SpriteBatch& spriteBatch)
+{
+    if (!transform_ || !sprite_) return;
+
+    if (animator_) {
+        spriteBatch.Draw(*sprite_, *transform_, *animator_);
+    } else {
+        spriteBatch.Draw(*sprite_, *transform_);
+    }
+}
+
+//----------------------------------------------------------------------------
+void Player::TakeDamage(float damage)
+{
+    if (!IsAlive()) return;
+
+    hp_ -= damage;
+    if (hp_ < 0.0f) {
+        hp_ = 0.0f;
+    }
+
+    if (hp_ <= 0.0f) {
+        LOG_INFO("[Player] Died!");
+        // TODO: OnPlayerDiedイベント発行
+        if (animator_) {
+            animator_->SetRow(3);  // Death
+            animator_->SetLooping(false);
+        }
+    }
+}
+
+//----------------------------------------------------------------------------
+Vector2 Player::GetPosition() const
+{
+    if (transform_) {
+        return transform_->GetPosition();
+    }
+    return Vector2::Zero;
+}
+
+//----------------------------------------------------------------------------
+bool Player::ConsumeFe(float amount)
+{
+    if (fe_ < amount) return false;
+
+    fe_ -= amount;
+    LOG_INFO("[Player] FE consumed: " + std::to_string(amount) + ", remaining: " + std::to_string(fe_));
+    return true;
+}
+
+//----------------------------------------------------------------------------
+void Player::RecoverFe(float amount)
+{
+    fe_ += amount;
+    if (fe_ > maxFe_) {
+        fe_ = maxFe_;
+    }
+}

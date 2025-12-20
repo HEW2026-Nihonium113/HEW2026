@@ -1,6 +1,6 @@
 //----------------------------------------------------------------------------
 //! @file   test_scene.h
-//! @brief  テストシーン
+//! @brief  テストシーン - A-RAS!ゲームプロトタイプ
 //----------------------------------------------------------------------------
 #pragma once
 
@@ -11,12 +11,16 @@
 #include "engine/component/camera2d.h"
 #include "engine/component/collider2d.h"
 #include "dx11/gpu/texture.h"
-#include "game/game_object/player.h"
+#include "game/entities/player.h"
+#include "game/entities/group.h"
+#include "game/ai/group_ai.h"
+#include "game/bond/bondable_entity.h"
 #include <memory>
 #include <vector>
 
 //----------------------------------------------------------------------------
-//! @brief テストシーン
+//! @brief テストシーン - A-RAS!ゲームプロトタイプ
+//! @details プレイヤー、敵グループ、縁システムの統合テスト
 //----------------------------------------------------------------------------
 class TestScene : public Scene
 {
@@ -28,8 +32,31 @@ public:
     [[nodiscard]] const char* GetName() const override { return "TestScene"; }
 
 private:
+    //! @brief 入力処理
+    void HandleInput(float dt);
+
+    //! @brief マウスカーソル下のグループを取得
+    //! @return カーソル下のGroup、なければnullptr
+    [[nodiscard]] Group* GetGroupUnderCursor() const;
+
+    //! @brief モード表示テキストを取得
+    [[nodiscard]] const char* GetModeText() const;
+
+    //! @brief ゲーム状態表示テキストを取得
+    [[nodiscard]] const char* GetStateText() const;
+
+    //! @brief 縁をデバッグ描画
+    void DrawBonds();
+
+    //! @brief UI情報を描画
+    void DrawUI();
+
+    //! @brief AIステータスをログ出力
+    void LogAIStatus();
+
     float time_ = 0.0f;
-    float fpsTimer_ = 0.0f;  //!< FPS表示用タイマー
+    float statusLogTimer_ = 0.0f;       //!< ステータスログ用タイマー
+    float statusLogInterval_ = 3.0f;    //!< ステータスログ間隔（秒）
 
     // カメラ
     std::unique_ptr<GameObject> cameraObj_;
@@ -38,15 +65,22 @@ private:
     // プレイヤー
     std::unique_ptr<Player> player_;
 
+    // 敵グループ
+    std::vector<std::unique_ptr<Group>> enemyGroups_;
+
+    // グループAI
+    std::vector<std::unique_ptr<GroupAI>> groupAIs_;
+
     // 背景
     std::unique_ptr<GameObject> background_;
     Transform2D* bgTransform_ = nullptr;
     SpriteRenderer* bgSprite_ = nullptr;
-
-    // 障害物オブジェクト
-    std::vector<std::unique_ptr<GameObject>> objects_;
-
-    // テスト用テクスチャ
-    TexturePtr testTexture_;
     TexturePtr backgroundTexture_;
+
+    // UI用テクスチャ
+    TexturePtr whiteTexture_;
+
+    // 画面サイズ
+    float screenWidth_ = 0.0f;
+    float screenHeight_ = 0.0f;
 };

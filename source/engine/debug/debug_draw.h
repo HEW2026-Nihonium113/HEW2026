@@ -43,6 +43,14 @@ public:
         const Color& color
     );
 
+    //! @brief 線を描画
+    void DrawLine(
+        const Vector2& start,
+        const Vector2& end,
+        const Color& color,
+        float lineWidth = 2.0f
+    );
+
 private:
     DebugDraw() = default;
     ~DebugDraw() = default;
@@ -64,6 +72,8 @@ private:
     DebugDraw::Get().DrawRectOutlineTopLeft(topLeft, size, color, ##__VA_ARGS__)
 #define DEBUG_RECT_FILL(center, size, color) \
     DebugDraw::Get().DrawRectFilled(center, size, color)
+#define DEBUG_LINE(start, end, color, ...) \
+    DebugDraw::Get().DrawLine(start, end, color, ##__VA_ARGS__)
 
 #else
 
@@ -73,5 +83,6 @@ private:
 #define DEBUG_RECT(...)      ((void)0)
 #define DEBUG_RECT_TL(...)   ((void)0)
 #define DEBUG_RECT_FILL(...) ((void)0)
+#define DEBUG_LINE(...)      ((void)0)
 
 #endif
