@@ -94,29 +94,10 @@ void Player::HandleInput(float dt, Camera2D& /*camera*/)
     if (keyboard.IsKeyPressed(Key::D)) move.x += moveSpeed_ * dt;
 
     // 移動処理
-    bool wasMoving = isMoving_;
     isMoving_ = (move.x != 0.0f || move.y != 0.0f);
 
     if (isMoving_) {
         transform_->Translate(move);
-
-        // 左右反転
-        if (animator_) {
-            if (move.x < 0.0f) {
-                animator_->SetMirror(false);
-            } else if (move.x > 0.0f) {
-                animator_->SetMirror(true);
-            }
-        }
-    }
-
-    // アニメーション切り替え
-    if (animator_) {
-        if (isMoving_ && !wasMoving) {
-            animator_->SetRow(1);  // Walk
-        } else if (!isMoving_ && wasMoving) {
-            animator_->SetRow(0);  // Idle
-        }
     }
 }
 
@@ -145,10 +126,6 @@ void Player::TakeDamage(float damage)
     if (hp_ <= 0.0f) {
         LOG_INFO("[Player] Died!");
         // TODO: OnPlayerDiedイベント発行
-        if (animator_) {
-            animator_->SetRow(3);  // Death
-            animator_->SetLooping(false);
-        }
     }
 }
 

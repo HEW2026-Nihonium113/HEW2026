@@ -62,6 +62,7 @@ void Individual::Shutdown()
     collider_ = nullptr;
     texture_.reset();
     ownerGroup_ = nullptr;
+    attackTarget_ = nullptr;
 }
 
 //----------------------------------------------------------------------------
@@ -315,6 +316,10 @@ void Individual::UpdateAction()
             action_ = IndividualAction::Attack;
             // 攻撃開始時にターゲット個体を選択
             SelectAttackTarget();
+            // ターゲットが見つかったら攻撃開始
+            if (attackTarget_) {
+                StartAttack();
+            }
         }
     } else {
         // 射程外 → Walk

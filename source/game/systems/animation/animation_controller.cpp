@@ -6,12 +6,7 @@
 #include "engine/component/animator.h"
 
 //----------------------------------------------------------------------------
-AnimationController::AnimationController()
-    : currentState_(AnimationState::Idle)
-    , isLocked_(false)
-    , wasPlaying_(true)
-{
-}
+AnimationController::AnimationController() = default;
 
 //----------------------------------------------------------------------------
 void AnimationController::SetRowMapping(AnimationState state, uint8_t row)
