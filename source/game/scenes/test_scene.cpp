@@ -9,6 +9,7 @@
 #include "engine/texture/texture_manager.h"
 #include "engine/c_systems/sprite_batch.h"
 #include "engine/c_systems/collision_manager.h"
+#include "engine/c_systems/collision_layers.h"
 #include "engine/debug/debug_draw.h"
 #include "engine/debug/circle_renderer.h"
 #include "engine/math/color.h"
@@ -434,7 +435,7 @@ void TestScene::HandleInput(float /*dt*/)
 
             // CollisionManagerで線分と交差するコライダーを検索
             std::vector<Collider2D*> hits;
-            CollisionManager::Get().QueryLineSegment(posA, posB, hits, 0x01);  // Player用レイヤー
+            CollisionManager::Get().QueryLineSegment(posA, posB, hits, CollisionLayer::Player);
 
             // プレイヤーのコライダーが含まれているか確認
             for (Collider2D* hitCollider : hits) {
@@ -463,7 +464,7 @@ Group* TestScene::GetGroupUnderCursor() const
 
     // CollisionManagerでマウス位置のコライダーを検索
     std::vector<Collider2D*> hits;
-    CollisionManager::Get().QueryPoint(mouseWorld, hits, 0x04);  // Individual用レイヤー
+    CollisionManager::Get().QueryPoint(mouseWorld, hits, CollisionLayer::Individual);
 
     for (Collider2D* hitCollider : hits) {
         for (const std::unique_ptr<Group>& group : enemyGroups_) {

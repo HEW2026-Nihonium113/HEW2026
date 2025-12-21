@@ -10,6 +10,7 @@
 #include "game/bond/bondable_entity.h"
 #include "engine/c_systems/sprite_batch.h"
 #include "engine/c_systems/collision_manager.h"
+#include "engine/c_systems/collision_layers.h"
 #include "common/logging/logging.h"
 
 //----------------------------------------------------------------------------
@@ -210,20 +211,21 @@ void Individual::SetupCollider()
     if (!gameObject_) return;
 
     collider_ = gameObject_->AddComponent<Collider2D>(Vector2(32, 32));
-    collider_->SetLayer(0x04);  // Individual用レイヤー
-    collider_->SetMask(0x0D);   // Individual(0x04) + Player(0x01) + Arrow(0x08)と衝突
+    collider_->SetLayer(CollisionLayer::Individual);
+    collider_->SetMask(CollisionLayer::IndividualMask);
 
     // 衝突コールバック：Playerとの衝突時に結びシステムを処理
     collider_->SetOnCollisionEnter([this](Collider2D* /*self*/, Collider2D* other) {
-        // Playerレイヤー(0x01)との衝突か確認
-        if ((CollisionManager::Get().GetLayer(other->GetHandle()) & 0x01) == 0) return;
+        // Playerレイヤーとの衝突か確認
+        uint32_t otherLayer = CollisionManager::Get().GetLayer(other->GetHandle());
+        if ((otherLayer & CollisionLayer::Player) == 0) return;
 
         // 結びモードでなければ無視
         if (!BindSystem::Get().IsEnabled()) return;
 
         // 所属グループを取得してマーク
         Group* group = GetOwnerGroup();
-        if (!group || group->IsDefeated()) return;
+        if (group == nullptr || group->IsDefeated()) return;
 
         BondableEntity entity = group;
         bool created = BindSystem::Get().MarkEntity(entity);
