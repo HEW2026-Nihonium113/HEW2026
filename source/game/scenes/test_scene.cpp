@@ -468,23 +468,26 @@ void TestScene::HandleInput(float /*dt*/)
     }
 
     // 切モード中: プレイヤーが縁を通過したら切断
-    if (CutSystem::Get().IsEnabled() && player_) {
-        Vector2 playerPos = player_->GetPosition();
+    if (CutSystem::Get().IsEnabled() && player_ && player_->GetCollider()) {
+        Collider2D* playerCollider = player_->GetCollider();
 
         const std::vector<std::unique_ptr<Bond>>& bonds = BondManager::Get().GetAllBonds();
         for (const std::unique_ptr<Bond>& bond : bonds) {
             Vector2 posA = BondableHelper::GetPosition(bond->GetEntityA());
             Vector2 posB = BondableHelper::GetPosition(bond->GetEntityB());
 
-            // 線分との距離を計算
-            LineSegment line(posA, posB);
-            float dist = line.DistanceToPoint(playerPos);
+            // CollisionManagerで線分と交差するコライダーを検索
+            std::vector<Collider2D*> hits;
+            CollisionManager::Get().QueryLineSegment(posA, posB, hits, 0x01);  // Player用レイヤー
 
-            if (dist < 30.0f) {
-                // CutSystemを通じて縁を切断（FE消費、硬直、絶縁、モード終了を自動処理）
-                if (CutSystem::Get().CutBond(bond.get())) {
-                    LOG_INFO("[TestScene] Bond cut!");
-                    break;
+            // プレイヤーのコライダーが含まれているか確認
+            for (Collider2D* hitCollider : hits) {
+                if (hitCollider == playerCollider) {
+                    // CutSystemを通じて縁を切断（FE消費、硬直、絶縁、モード終了を自動処理）
+                    if (CutSystem::Get().CutBond(bond.get())) {
+                        LOG_INFO("[TestScene] Bond cut!");
+                        break;
+                    }
                 }
             }
         }

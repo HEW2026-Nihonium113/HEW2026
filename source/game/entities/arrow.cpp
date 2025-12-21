@@ -7,6 +7,7 @@
 #include "player.h"
 #include "engine/texture/texture_manager.h"
 #include "engine/c_systems/sprite_batch.h"
+#include "engine/c_systems/collision_manager.h"
 #include "engine/debug/debug_draw.h"
 #include "engine/math/color.h"
 #include "common/logging/logging.h"
@@ -38,6 +39,16 @@ void Arrow::Initialize(const Vector2& startPos, const Vector2& targetPos)
     gameObject_ = std::make_unique<GameObject>("Arrow");
     transform_ = gameObject_->AddComponent<Transform2D>(startPos);
     sprite_ = gameObject_->AddComponent<SpriteRenderer>();
+
+    // コライダー設定（矢のサイズに合わせた小さなAABB）
+    collider_ = gameObject_->AddComponent<Collider2D>(Vector2(20.0f, 10.0f));
+    collider_->SetLayer(0x08);  // 矢用レイヤー
+    // ターゲットに応じてマスク設定
+    if (target_) {
+        collider_->SetMask(0x04);  // Individual用レイヤー
+    } else if (targetPlayer_) {
+        collider_->SetMask(0x01);  // Player用レイヤー
+    }
 
     // 白テクスチャを作成（矢の形）
     std::vector<uint32_t> arrowPixels(16 * 4, 0xFFFFFFFF);
@@ -129,7 +140,10 @@ Vector2 Arrow::GetPosition() const
 //----------------------------------------------------------------------------
 void Arrow::CheckHit()
 {
-    Vector2 arrowPos = GetPosition();
+    if (!collider_) {
+        isActive_ = false;
+        return;
+    }
 
     // Individual対象
     if (target_) {
@@ -138,10 +152,8 @@ void Arrow::CheckHit()
             return;
         }
 
-        Vector2 targetPos = target_->GetPosition();
-        float dist = (targetPos - arrowPos).Length();
-
-        if (dist <= kHitRadius) {
+        Collider2D* targetCollider = target_->GetCollider();
+        if (targetCollider && collider_->GetAABB().Intersects(targetCollider->GetAABB())) {
             target_->TakeDamage(damage_);
             isActive_ = false;
 
@@ -160,10 +172,8 @@ void Arrow::CheckHit()
             return;
         }
 
-        Vector2 targetPos = targetPlayer_->GetPosition();
-        float dist = (targetPos - arrowPos).Length();
-
-        if (dist <= kHitRadius) {
+        Collider2D* targetCollider = targetPlayer_->GetCollider();
+        if (targetCollider && collider_->GetAABB().Intersects(targetCollider->GetAABB())) {
             targetPlayer_->TakeDamage(damage_);
             isActive_ = false;
 
