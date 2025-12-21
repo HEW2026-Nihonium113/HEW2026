@@ -585,6 +585,11 @@ void TestScene::Render()
         group->Render(spriteBatch);
     }
 
+#ifdef _DEBUG
+    // 個体コライダー描画
+    DrawIndividualColliders();
+#endif
+
     // 矢の描画
     ArrowManager::Get().Render(spriteBatch);
 
@@ -651,6 +656,22 @@ void TestScene::DrawDetectionRanges()
         Vector2 groupPos = group->GetPosition();
         float detectionRange = group->GetDetectionRange();
         CircleRenderer::Get().DrawFilled(groupPos, detectionRange, detectionRangeColor);
+    }
+}
+
+//----------------------------------------------------------------------------
+void TestScene::DrawIndividualColliders()
+{
+    Color colliderColor(0.0f, 1.0f, 1.0f, 0.8f);  // シアン
+    Vector2 colliderSize(32.0f, 32.0f);  // Individual::SetupCollider()と同じサイズ
+
+    for (const std::unique_ptr<Group>& group : enemyGroups_) {
+        if (group->IsDefeated()) continue;
+
+        for (Individual* individual : group->GetAliveIndividuals()) {
+            Vector2 pos = individual->GetPosition();
+            DEBUG_RECT(pos, colliderSize, colliderColor, 2.0f);
+        }
     }
 }
 #endif
