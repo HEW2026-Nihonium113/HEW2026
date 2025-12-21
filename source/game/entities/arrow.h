@@ -60,9 +60,6 @@ public:
     [[nodiscard]] Vector2 GetPosition() const;
 
 private:
-    //! @brief ターゲットへの命中チェック
-    void CheckHit();
-
     // 所有者・ターゲット
     Individual* owner_ = nullptr;
     Individual* target_ = nullptr;

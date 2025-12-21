@@ -428,46 +428,11 @@ void TestScene::HandleInput(float /*dt*/)
         }
     }
 
-    // 結モード中: プレイヤーが触れたらマーク
-    if (BindSystem::Get().IsEnabled() && player_ && player_->GetCollider()) {
-        // CollisionManagerでプレイヤーAABB内のIndividualを検索
-        std::vector<Collider2D*> hits;
-        CollisionManager::Get().QueryAABB(
-            player_->GetCollider()->GetAABB(),
-            hits,
-            0x04  // Individual用レイヤー
-        );
-
-        for (Collider2D* hitCollider : hits) {
-            // ヒットしたコライダーからIndividualとGroupを特定
-            for (const std::unique_ptr<Group>& group : enemyGroups_) {
-                if (group->IsDefeated()) continue;
-
-                // 既にマーク済みのグループはスキップ
-                if (BindSystem::Get().HasMark()) {
-                    std::optional<BondableEntity> marked = BindSystem::Get().GetMarkedEntity();
-                    if (marked.has_value() && BondableHelper::IsSame(marked.value(), group.get())) {
-                        continue;
-                    }
-                }
-
-                for (Individual* individual : group->GetAliveIndividuals()) {
-                    if (individual->GetCollider() == hitCollider) {
-                        BondableEntity entity = group.get();
-                        bool created = BindSystem::Get().MarkEntity(entity);
-                        if (created) {
-                            LOG_INFO("[TestScene] Bond created!");
-                        } else if (BindSystem::Get().HasMark()) {
-                            LOG_INFO("[TestScene] Marked: " + group->GetId());
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    // 結モード中: CollisionManagerのコールバックで自動処理
+    // （Individual::SetupCollider()で設定済み）
 
     // 切モード中: プレイヤーが縁を通過したら切断
+    // ※縁はコライダーを持たないためQueryLineSegmentを使用
     if (CutSystem::Get().IsEnabled() && player_ && player_->GetCollider()) {
         Collider2D* playerCollider = player_->GetCollider();
 

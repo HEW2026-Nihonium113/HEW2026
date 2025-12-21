@@ -43,12 +43,38 @@ void Arrow::Initialize(const Vector2& startPos, const Vector2& targetPos)
     // コライダー設定（矢のサイズに合わせた小さなAABB）
     collider_ = gameObject_->AddComponent<Collider2D>(Vector2(20.0f, 10.0f));
     collider_->SetLayer(0x08);  // 矢用レイヤー
-    // ターゲットに応じてマスク設定
-    if (target_) {
-        collider_->SetMask(0x04);  // Individual用レイヤー
-    } else if (targetPlayer_) {
-        collider_->SetMask(0x01);  // Player用レイヤー
-    }
+    collider_->SetMask(0x05);   // Individual(0x04) + Player(0x01)と衝突
+
+    // 衝突コールバック設定
+    collider_->SetOnCollisionEnter([this](Collider2D* /*self*/, Collider2D* other) {
+        if (!isActive_) return;
+
+        // Individual対象
+        if (target_ && target_->GetCollider() == other) {
+            if (target_->IsAlive()) {
+                target_->TakeDamage(damage_);
+                isActive_ = false;
+                if (owner_) {
+                    LOG_INFO("[Arrow] Hit! " + owner_->GetId() + " -> " + target_->GetId() +
+                             " for " + std::to_string(damage_) + " damage");
+                }
+            }
+            return;
+        }
+
+        // Player対象
+        if (targetPlayer_ && targetPlayer_->GetCollider() == other) {
+            if (targetPlayer_->IsAlive()) {
+                targetPlayer_->TakeDamage(damage_);
+                isActive_ = false;
+                if (owner_) {
+                    LOG_INFO("[Arrow] Hit! " + owner_->GetId() + " -> Player for " +
+                             std::to_string(damage_) + " damage");
+                }
+            }
+            return;
+        }
+    });
 
     // 白テクスチャを作成（矢の形）
     std::vector<uint32_t> arrowPixels(16 * 4, 0xFFFFFFFF);
@@ -106,8 +132,7 @@ void Arrow::Update(float dt)
         transform_->SetPosition(pos);
     }
 
-    // 命中チェック
-    CheckHit();
+    // 命中チェックはCollisionManagerのコールバックで自動処理
 
     // GameObject更新
     if (gameObject_) {
@@ -137,54 +162,3 @@ Vector2 Arrow::GetPosition() const
     return Vector2::Zero;
 }
 
-//----------------------------------------------------------------------------
-void Arrow::CheckHit()
-{
-    if (!collider_) {
-        isActive_ = false;
-        return;
-    }
-
-    // Individual対象
-    if (target_) {
-        if (!target_->IsAlive()) {
-            isActive_ = false;
-            return;
-        }
-
-        Collider2D* targetCollider = target_->GetCollider();
-        if (targetCollider && collider_->GetAABB().Intersects(targetCollider->GetAABB())) {
-            target_->TakeDamage(damage_);
-            isActive_ = false;
-
-            if (owner_) {
-                LOG_INFO("[Arrow] Hit! " + owner_->GetId() + " -> " + target_->GetId() +
-                         " for " + std::to_string(damage_) + " damage");
-            }
-        }
-        return;
-    }
-
-    // Player対象
-    if (targetPlayer_) {
-        if (!targetPlayer_->IsAlive()) {
-            isActive_ = false;
-            return;
-        }
-
-        Collider2D* targetCollider = targetPlayer_->GetCollider();
-        if (targetCollider && collider_->GetAABB().Intersects(targetCollider->GetAABB())) {
-            targetPlayer_->TakeDamage(damage_);
-            isActive_ = false;
-
-            if (owner_) {
-                LOG_INFO("[Arrow] Hit! " + owner_->GetId() + " -> Player for " +
-                         std::to_string(damage_) + " damage");
-            }
-        }
-        return;
-    }
-
-    // ターゲットなし
-    isActive_ = false;
-}
