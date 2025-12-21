@@ -429,40 +429,39 @@ void TestScene::HandleInput(float /*dt*/)
     }
 
     // 結モード中: プレイヤーが触れたらマーク
-    if (BindSystem::Get().IsEnabled() && player_) {
-        Vector2 playerPos = player_->GetPosition();
+    if (BindSystem::Get().IsEnabled() && player_ && player_->GetCollider()) {
+        // CollisionManagerでプレイヤーAABB内のIndividualを検索
+        std::vector<Collider2D*> hits;
+        CollisionManager::Get().QueryAABB(
+            player_->GetCollider()->GetAABB(),
+            hits,
+            0x04  // Individual用レイヤー
+        );
 
-        // 敵グループの個体に触れたか
-        for (const std::unique_ptr<Group>& group : enemyGroups_) {
-            if (group->IsDefeated()) continue;
+        for (Collider2D* hitCollider : hits) {
+            // ヒットしたコライダーからIndividualとGroupを特定
+            for (const std::unique_ptr<Group>& group : enemyGroups_) {
+                if (group->IsDefeated()) continue;
 
-            // 既にマーク済みのグループはスキップ
-            if (BindSystem::Get().HasMark()) {
-                std::optional<BondableEntity> marked = BindSystem::Get().GetMarkedEntity();
-                if (marked.has_value()) {
-                    BondableEntity currentGroup = group.get();
-                    if (BondableHelper::IsSame(marked.value(), currentGroup)) {
+                // 既にマーク済みのグループはスキップ
+                if (BindSystem::Get().HasMark()) {
+                    std::optional<BondableEntity> marked = BindSystem::Get().GetMarkedEntity();
+                    if (marked.has_value() && BondableHelper::IsSame(marked.value(), group.get())) {
                         continue;
                     }
                 }
-            }
 
-            for (Individual* individual : group->GetAliveIndividuals()) {
-                // コライダー同士の衝突判定
-                Collider2D* playerCollider = player_->GetCollider();
-                Collider2D* indivCollider = individual->GetCollider();
-                if (!playerCollider || !indivCollider) continue;
-
-                if (playerCollider->GetAABB().Intersects(indivCollider->GetAABB())) {
-                    BondableEntity entity = group.get();
-                    // MarkEntityがFE消費、縁作成、モード終了を自動処理
-                    bool created = BindSystem::Get().MarkEntity(entity);
-                    if (created) {
-                        LOG_INFO("[TestScene] Bond created!");
-                    } else if (BindSystem::Get().HasMark()) {
-                        LOG_INFO("[TestScene] Marked: " + group->GetId());
+                for (Individual* individual : group->GetAliveIndividuals()) {
+                    if (individual->GetCollider() == hitCollider) {
+                        BondableEntity entity = group.get();
+                        bool created = BindSystem::Get().MarkEntity(entity);
+                        if (created) {
+                            LOG_INFO("[TestScene] Bond created!");
+                        } else if (BindSystem::Get().HasMark()) {
+                            LOG_INFO("[TestScene] Marked: " + group->GetId());
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -503,16 +502,18 @@ Group* TestScene::GetGroupUnderCursor() const
         Vector2(static_cast<float>(mouse.GetX()), static_cast<float>(mouse.GetY()))
     );
 
-    // 個体単位で当たり判定（コライダー使用）
-    for (const std::unique_ptr<Group>& group : enemyGroups_) {
-        if (group->IsDefeated()) continue;
+    // CollisionManagerでマウス位置のコライダーを検索
+    std::vector<Collider2D*> hits;
+    CollisionManager::Get().QueryPoint(mouseWorld, hits, 0x04);  // Individual用レイヤー
 
-        for (Individual* individual : group->GetAliveIndividuals()) {
-            Collider2D* collider = individual->GetCollider();
-            if (!collider) continue;
+    for (Collider2D* hitCollider : hits) {
+        for (const std::unique_ptr<Group>& group : enemyGroups_) {
+            if (group->IsDefeated()) continue;
 
-            if (collider->GetAABB().Contains(mouseWorld.x, mouseWorld.y)) {
-                return group.get();
+            for (Individual* individual : group->GetAliveIndividuals()) {
+                if (individual->GetCollider() == hitCollider) {
+                    return group.get();
+                }
             }
         }
     }
