@@ -6,6 +6,7 @@
 #include "engine/input/input_manager.h"
 #include "engine/texture/texture_manager.h"
 #include "engine/c_systems/sprite_batch.h"
+#include "engine/c_systems/collision_layers.h"
 #include "common/logging/logging.h"
 
 //----------------------------------------------------------------------------
@@ -51,8 +52,8 @@ void Player::Initialize(const Vector2& position)
     // Collider
     collider_ = gameObject_->AddComponent<Collider2D>();
     collider_->SetBounds(Vector2(-20, -30), Vector2(20, 30));
-    collider_->SetLayer(0x01);  // プレイヤーレイヤー
-    collider_->SetMask(0x0C);   // Individual(0x04) + Arrow(0x08)と衝突
+    collider_->SetLayer(CollisionLayer::Player);
+    collider_->SetMask(CollisionLayer::PlayerMask);
 
     LOG_INFO("[Player] Initialized");
 }
