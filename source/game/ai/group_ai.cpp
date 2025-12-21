@@ -8,6 +8,7 @@
 #include "game/systems/stagger_system.h"
 #include "game/systems/combat_system.h"
 #include "engine/component/camera2d.h"
+#include "engine/c_systems/collision_manager.h"
 #include "common/logging/logging.h"
 #include <random>
 #include <cmath>
@@ -237,17 +238,18 @@ void GroupAI::UpdateSeek(float dt)
              " -> " + targetType + ":" + targetName +
              " pos=(" + std::to_string(static_cast<int>(targetPos.x)) + "," +
              std::to_string(static_cast<int>(targetPos.y)) + ")");
-    Vector2 direction = targetPos - currentPos;
-    float distance = direction.Length();
 
-    // 索敵範囲外ならターゲットを見失う
-    if (distance > detectionRange_) {
+    // 索敵範囲外ならターゲットを見失う（円形判定 - sqrtなし）
+    Circle detectionCircle(currentPos, detectionRange_);
+    if (!detectionCircle.Contains(targetPos)) {
         LOG_INFO("[GroupAI] " + owner_->GetId() + " lost target (out of range)");
         ClearTarget();
         return;
     }
 
     // 攻撃範囲内なら移動しない（遠距離攻撃ユニットは近づかない）
+    Vector2 direction = targetPos - currentPos;
+    float distance = direction.Length();
     float attackRange = owner_->GetMaxAttackRange();
     if (attackRange < 50.0f) {
         attackRange = 50.0f;  // 最低でも50（近接用）

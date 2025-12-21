@@ -418,7 +418,7 @@ void TestScene::HandleInput(float /*dt*/)
         }
     }
 
-    // 結モード中: プレイヤーが触れたらマーク
+    // 結モード中: プレイヤーが触れたらマーク（AABB判定）
     if (BindSystem::Get().IsEnabled() && player_ && player_->GetCollider()) {
         AABB playerAABB = player_->GetCollider()->GetAABB();
 
@@ -441,9 +441,8 @@ void TestScene::HandleInput(float /*dt*/)
                 Collider2D* collider = individual->GetCollider();
                 if (!collider) continue;
 
-                // コライダーAABBの交差判定
-                AABB individualAABB = collider->GetAABB();
-                if (playerAABB.Intersects(individualAABB)) {
+                // AABB判定
+                if (playerAABB.Intersects(collider->GetAABB())) {
                     LOG_INFO("[TestScene] Touch detected: " + individual->GetId());
                     BondableEntity entity = group.get();
                     // MarkEntityがFE消費、縁作成、モード終了を自動処理
@@ -494,7 +493,7 @@ Group* TestScene::GetGroupUnderCursor() const
         Vector2(static_cast<float>(mouse.GetX()), static_cast<float>(mouse.GetY()))
     );
 
-    // 個体のコライダーで当たり判定
+    // 個体のコライダーで当たり判定（AABB）
     for (const std::unique_ptr<Group>& group : enemyGroups_) {
         if (group->IsDefeated()) continue;
 
@@ -502,9 +501,8 @@ Group* TestScene::GetGroupUnderCursor() const
             Collider2D* collider = individual->GetCollider();
             if (!collider) continue;
 
-            // マウス座標がコライダー内にあるか
-            AABB aabb = collider->GetAABB();
-            if (aabb.Contains(mouseWorld.x, mouseWorld.y)) {
+            // マウス座標がAABB内にあるか
+            if (collider->GetAABB().Contains(mouseWorld.x, mouseWorld.y)) {
                 return group.get();
             }
         }

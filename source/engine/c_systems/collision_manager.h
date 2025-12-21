@@ -81,6 +81,39 @@ struct AABB {
 };
 
 //============================================================================
+//! @brief 円形コライダー
+//============================================================================
+struct Circle {
+    Vector2 center;
+    float radius = 0.0f;
+
+    Circle() = default;
+    Circle(const Vector2& c, float r) : center(c), radius(r) {}
+    Circle(float x, float y, float r) : center(x, y), radius(r) {}
+
+    //! @brief 他の円と交差しているか判定
+    [[nodiscard]] bool Intersects(const Circle& other) const noexcept {
+        float dx = center.x - other.center.x;
+        float dy = center.y - other.center.y;
+        float distSq = dx * dx + dy * dy;
+        float radiusSum = radius + other.radius;
+        return distSq < radiusSum * radiusSum;
+    }
+
+    //! @brief 点を含んでいるか判定
+    [[nodiscard]] bool Contains(float px, float py) const noexcept {
+        float dx = px - center.x;
+        float dy = py - center.y;
+        return dx * dx + dy * dy < radius * radius;
+    }
+
+    //! @brief 点を含んでいるか判定
+    [[nodiscard]] bool Contains(const Vector2& point) const noexcept {
+        return Contains(point.x, point.y);
+    }
+};
+
+//============================================================================
 //! @brief 衝突コールバック型
 //============================================================================
 using CollisionCallback = std::function<void(Collider2D*, Collider2D*)>;

@@ -11,6 +11,7 @@
 #include "game/bond/bond_manager.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
+#include "engine/c_systems/collision_manager.h"
 #include "common/logging/logging.h"
 #include <algorithm>
 
@@ -124,24 +125,23 @@ Group* CombatSystem::SelectTarget(Group* attacker) const
     Group* bestTarget = nullptr;
     float highestThreat = -1.0f;
     Vector2 attackerPos = attacker->GetPosition();
-    float detectionRange = attacker->GetDetectionRange();
+    Circle detectionCircle(attackerPos, attacker->GetDetectionRange());
 
     LOG_INFO("[SelectTarget] " + attacker->GetId() + " pos=(" +
              std::to_string(attackerPos.x) + "," + std::to_string(attackerPos.y) +
-             ") range=" + std::to_string(detectionRange));
+             ") range=" + std::to_string(detectionCircle.radius));
 
     for (Group* candidate : groups_) {
         if (!candidate || candidate == attacker) continue;
         if (candidate->IsDefeated()) continue;
 
-        // 索敵範囲チェック
+        // 索敵範囲チェック（円形判定）
         Vector2 candidatePos = candidate->GetPosition();
-        float distance = (candidatePos - attackerPos).Length();
 
-        LOG_INFO("  -> " + candidate->GetId() + " dist=" + std::to_string(distance) +
+        LOG_INFO("  -> " + candidate->GetId() +
                  " hostile=" + std::to_string(AreHostile(attacker, candidate)));
 
-        if (distance > detectionRange) continue;
+        if (!detectionCircle.Contains(candidatePos)) continue;
 
         // 縁で繋がっていたら攻撃しない
         if (!AreHostile(attacker, candidate)) continue;
@@ -163,11 +163,9 @@ bool CombatSystem::CanAttackPlayer(Group* attacker) const
     if (!attacker || !player_) return false;
     if (!player_->IsAlive()) return false;
 
-    // 索敵範囲チェック
-    Vector2 attackerPos = attacker->GetPosition();
-    Vector2 playerPos = player_->GetPosition();
-    float distance = (playerPos - attackerPos).Length();
-    if (distance > attacker->GetDetectionRange()) return false;
+    // 索敵範囲チェック（円形判定）
+    Circle detectionCircle(attacker->GetPosition(), attacker->GetDetectionRange());
+    if (!detectionCircle.Contains(player_->GetPosition())) return false;
 
     // プレイヤーと縁で繋がっていたら攻撃しない
     return IsHostileToPlayer(attacker);
