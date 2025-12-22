@@ -22,17 +22,18 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
     std::random_device rd;
     rng_ = std::mt19937(rd());
 
-    // ベースカラー（草原の緑 - 明るめ）
-    baseColor_ = Color(0.45f, 0.65f, 0.40f, 1.0f);
-
-    // 1x1白テクスチャを作成（ベースカラー描画用）
-    {
-        uint32_t whitePixel = 0xFFFFFFFF;  // RGBA白
-        whiteTexture_ = Texture::Create2D(1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, &whitePixel);
-    }
-
     // テクスチャパスのベース
     std::string basePath = stageId + "/";
+
+    // ベース地面テクスチャ読み込み（敷き詰め用）
+    baseGroundTexture_ = TextureManager::Get().LoadTexture2D(basePath + "ground simple.jpg");
+    if (baseGroundTexture_) {
+        baseGroundWidth_ = static_cast<float>(baseGroundTexture_->Width());
+        baseGroundHeight_ = static_cast<float>(baseGroundTexture_->Height());
+        LOG_INFO("[StageBackground] Base ground texture loaded: " + std::to_string(baseGroundWidth_) + "x" + std::to_string(baseGroundHeight_));
+    } else {
+        LOG_ERROR("[StageBackground] Failed to load base ground texture");
+    }
 
     // 地面テクスチャ読み込み
     groundTexture_ = TextureManager::Get().LoadTexture2D(basePath + "ground.png");
@@ -223,19 +224,32 @@ void StageBackground::AddDecoration(TexturePtr texture, const Vector2& position,
 //----------------------------------------------------------------------------
 void StageBackground::Render(SpriteBatch& spriteBatch)
 {
-    // 1. ベースカラー（単色の緑）を描画
-    if (whiteTexture_) {
-        Vector2 baseScale(stageWidth_, stageHeight_);
-        spriteBatch.Draw(
-            whiteTexture_.get(),
-            Vector2(stageWidth_ * 0.5f, stageHeight_ * 0.5f),
-            baseColor_,
-            0.0f,
-            Vector2(0.5f, 0.5f),
-            baseScale,
-            false, false,
-            -99, 0
-        );
+    // 1. ベース地面テクスチャを敷き詰め
+    if (baseGroundTexture_) {
+        Vector2 origin(baseGroundWidth_ * 0.5f, baseGroundHeight_ * 0.5f);
+
+        // 画面をカバーするタイル数
+        int tilesX = static_cast<int>(std::ceil(stageWidth_ / baseGroundWidth_)) + 1;
+        int tilesY = static_cast<int>(std::ceil(stageHeight_ / baseGroundHeight_)) + 1;
+
+        for (int y = 0; y < tilesY; ++y) {
+            for (int x = 0; x < tilesX; ++x) {
+                Vector2 pos(
+                    x * baseGroundWidth_ + baseGroundWidth_ * 0.5f,
+                    y * baseGroundHeight_ + baseGroundHeight_ * 0.5f
+                );
+                spriteBatch.Draw(
+                    baseGroundTexture_.get(),
+                    pos,
+                    Colors::White,
+                    0.0f,
+                    origin,
+                    Vector2::One,
+                    false, false,
+                    -99, 0
+                );
+            }
+        }
     }
 
     // ベースを先にフラッシュ
@@ -296,7 +310,7 @@ void StageBackground::Shutdown()
     groundTiles_.clear();
     decorations_.clear();
     groundTexture_.reset();
-    whiteTexture_.reset();
+    baseGroundTexture_.reset();
     groundVertexShader_.reset();
     groundPixelShader_.reset();
     premultipliedBlendState_.reset();
