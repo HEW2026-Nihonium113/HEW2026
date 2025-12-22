@@ -7,8 +7,10 @@
 #include "engine/shader/shader_manager.h"
 #include "engine/c_systems/sprite_batch.h"
 #include "dx11/gpu/texture.h"
+#include "dx11/graphics_context.h"
 #include "common/logging/logging.h"
 #include <algorithm>
+#include <DirectXMath.h>
 
 //----------------------------------------------------------------------------
 void StageBackground::Initialize(const std::string& stageId, float screenWidth, float screenHeight)
@@ -45,8 +47,8 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
         tileWidth_ = texW;
         tileHeight_ = texH;
 
-        // オーバーラップ率（fadeWidth=0.15 × 2 = 30%が正しい）
-        float overlapRatio = 0.30f;
+        // オーバーラップ率（fadeWidth=0.30 に合わせて50%に増加）
+        float overlapRatio = 0.50f;
         float stepX = tileWidth_ * (1.0f - overlapRatio);
         float stepY = tileHeight_ * (1.0f - overlapRatio);
 
@@ -54,17 +56,21 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
         std::uniform_int_distribution<int> rotDist(0, 3);
         std::uniform_int_distribution<int> flipDist(0, 1);
 
-        // ステージ全体をカバーするタイル数を計算（オーバーラップ考慮）
-        int tilesX = static_cast<int>(std::ceil(screenWidth / stepX)) + 2;
-        int tilesY = static_cast<int>(std::ceil(screenHeight / stepY)) + 2;
+        // ステージ全体をカバーするタイル数を計算（50%オーバーラップ + オフセット分）
+        int tilesX = static_cast<int>(std::ceil(screenWidth / stepX)) + 4;
+        int tilesY = static_cast<int>(std::ceil(screenHeight / stepY)) + 4;
 
         // タイルを配置（オーバーラップあり、シェーダーで端フェード）
-        for (int y = -1; y < tilesY; ++y) {
-            for (int x = -1; x < tilesX; ++x) {
+        // エッジフェードを考慮して、最初のタイルを左上にオフセット
+        float offsetX = -tileWidth_ * 0.50f;   // オーバーラップ分
+        float offsetY = -tileHeight_ * 0.50f;  // オーバーラップ分
+
+        for (int y = 0; y < tilesY; ++y) {
+            for (int x = 0; x < tilesX; ++x) {
                 GroundTile tile;
                 tile.position = Vector2(
-                    x * stepX + tileWidth_ * 0.5f,
-                    y * stepY + tileHeight_ * 0.5f
+                    x * stepX + tileWidth_ * 0.5f + offsetX,
+                    y * stepY + tileHeight_ * 0.5f + offsetY
                 );
                 tile.rotation = rotDist(rng_) * 1.5707963f;  // 0, 90, 180, 270度
                 tile.flipX = flipDist(rng_) == 1;
@@ -88,11 +94,48 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
         LOG_WARN("[StageBackground] Ground shaders not loaded, using default");
     }
 
-    // プリマルチプライドアルファ用ブレンドステート作成
-    premultipliedBlendState_ = BlendState::CreatePremultipliedAlpha();
-    if (premultipliedBlendState_) {
-        LOG_INFO("[StageBackground] Premultiplied alpha blend state created");
+    // 正規化シェーダー読み込み（2パス目）
+    normalizePixelShader_ = ShaderManager::Get().LoadPixelShader("ground_normalize_ps.hlsl");
+    if (normalizePixelShader_) {
+        LOG_INFO("[StageBackground] Normalize shader loaded");
+    } else {
+        LOG_WARN("[StageBackground] Normalize shader not loaded");
     }
+
+    // 蓄積用レンダーターゲット作成（RGBA16F、オーバーフロー防止）
+    accumulationRT_ = TextureManager::Get().CreateRenderTarget(
+        static_cast<uint32_t>(screenWidth),
+        static_cast<uint32_t>(screenHeight),
+        DXGI_FORMAT_R16G16B16A16_FLOAT);
+    if (accumulationRT_) {
+        LOG_INFO("[StageBackground] Accumulation RT created: " +
+                 std::to_string(static_cast<int>(screenWidth)) + "x" +
+                 std::to_string(static_cast<int>(screenHeight)));
+    } else {
+        LOG_ERROR("[StageBackground] Failed to create accumulation RT");
+    }
+
+    // 純粋加算ブレンドステート作成（ONE + ONE）
+    {
+        D3D11_BLEND_DESC desc{};
+        desc.AlphaToCoverageEnable = FALSE;
+        desc.IndependentBlendEnable = FALSE;
+        desc.RenderTarget[0].BlendEnable = TRUE;
+        desc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;        // Src * 1
+        desc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;       // + Dest * 1
+        desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;   // SrcA * 1
+        desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;  // + DestA * 1
+        desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        additiveBlendState_ = BlendState::Create(desc);
+    }
+    if (additiveBlendState_) {
+        LOG_INFO("[StageBackground] Additive blend state created");
+    }
+
+    // 地面テクスチャをプリベイク（2パス正規化）
+    BakeGroundTexture();
 
     // 装飾を配置
     PlaceDecorations(stageId, screenWidth, screenHeight);
@@ -222,6 +265,126 @@ void StageBackground::AddDecoration(TexturePtr texture, const Vector2& position,
 }
 
 //----------------------------------------------------------------------------
+void StageBackground::BakeGroundTexture()
+{
+    // 必要なリソースが揃っているか確認
+    if (!groundTexture_ || !groundVertexShader_ || !groundPixelShader_ ||
+        !accumulationRT_ || !additiveBlendState_ || !normalizePixelShader_) {
+        LOG_WARN("[StageBackground] Cannot bake ground texture - missing resources");
+        return;
+    }
+
+    auto& ctx = GraphicsContext::Get();
+    ID3D11DeviceContext4* d3dCtx = ctx.GetContext();
+    SpriteBatch& spriteBatch = SpriteBatch::Get();
+
+    // 現在のレンダーターゲットを保存
+    ComPtr<ID3D11RenderTargetView> savedRTV;
+    ComPtr<ID3D11DepthStencilView> savedDSV;
+    d3dCtx->OMGetRenderTargets(1, savedRTV.GetAddressOf(), savedDSV.GetAddressOf());
+
+    D3D11_VIEWPORT savedViewport;
+    UINT numViewports = 1;
+    d3dCtx->RSGetViewports(&numViewports, &savedViewport);
+
+    // ステージ全体をカバーする直交投影行列を作成（カメラなし）
+    // 左上が(0,0)、右下が(stageWidth, stageHeight)
+    DirectX::XMMATRIX orthoProj = DirectX::XMMatrixOrthographicOffCenterLH(
+        0.0f, stageWidth_,      // left, right
+        stageHeight_, 0.0f,     // bottom, top (Y軸反転)
+        0.0f, 1.0f              // nearZ, farZ
+    );
+    DirectX::XMMATRIX transposed = DirectX::XMMatrixTranspose(orthoProj);
+    Matrix viewProj;
+    DirectX::XMStoreFloat4x4(reinterpret_cast<DirectX::XMFLOAT4X4*>(&viewProj), transposed);
+
+    // === パス1: 蓄積パス（accumulationRTに加算ブレンドで描画） ===
+    ctx.SetRenderTarget(accumulationRT_.get(), nullptr);
+    ctx.SetViewport(0, 0, screenWidth_, screenHeight_);
+
+    // 黒でクリア（蓄積開始点）
+    float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    ctx.ClearRenderTarget(accumulationRT_.get(), clearColor);
+
+    // 固定投影行列を設定
+    spriteBatch.SetViewProjection(viewProj);
+    spriteBatch.SetCustomShaders(groundVertexShader_.get(), groundPixelShader_.get());
+    spriteBatch.SetCustomBlendState(additiveBlendState_.get());
+    spriteBatch.Begin();
+
+    Vector2 origin(tileWidth_ * 0.5f, tileHeight_ * 0.5f);
+    for (const GroundTile& tile : groundTiles_) {
+        spriteBatch.Draw(
+            groundTexture_.get(),
+            tile.position,
+            Color(1.0f, 1.0f, 1.0f, tile.alpha),
+            tile.rotation,
+            origin,
+            Vector2::One,
+            tile.flipX, tile.flipY,
+            0, 0  // sortingLayerは不要
+        );
+    }
+
+    spriteBatch.End();
+    spriteBatch.ClearCustomShaders();
+    spriteBatch.ClearCustomBlendState();
+
+    // === パス2: 正規化パス（蓄積結果を正規化してbakedGroundTextureに描画） ===
+    // ベイク済みテクスチャ用RTを作成
+    bakedGroundTexture_ = TextureManager::Get().CreateRenderTarget(
+        static_cast<uint32_t>(screenWidth_),
+        static_cast<uint32_t>(screenHeight_),
+        DXGI_FORMAT_R8G8B8A8_UNORM);
+
+    if (!bakedGroundTexture_) {
+        LOG_ERROR("[StageBackground] Failed to create baked ground texture");
+        // RTを復元して終了
+        d3dCtx->OMSetRenderTargets(1, savedRTV.GetAddressOf(), savedDSV.Get());
+        d3dCtx->RSSetViewports(1, &savedViewport);
+        return;
+    }
+
+    ctx.SetRenderTarget(bakedGroundTexture_.get(), nullptr);
+    ctx.SetViewport(0, 0, screenWidth_, screenHeight_);
+
+    // 透明でクリア
+    float clearTransparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    ctx.ClearRenderTarget(bakedGroundTexture_.get(), clearTransparent);
+
+    // 正規化シェーダーで蓄積RTを描画
+    spriteBatch.SetViewProjection(viewProj);
+    spriteBatch.SetCustomShaders(nullptr, normalizePixelShader_.get());
+    spriteBatch.Begin();
+
+    // 蓄積RTをステージ全体に描画
+    Vector2 rtOrigin(screenWidth_ * 0.5f, screenHeight_ * 0.5f);
+    spriteBatch.Draw(
+        accumulationRT_.get(),
+        Vector2(screenWidth_ * 0.5f, screenHeight_ * 0.5f),
+        Colors::White,
+        0.0f,
+        rtOrigin,
+        Vector2::One,
+        false, false,
+        0, 0
+    );
+
+    spriteBatch.End();
+    spriteBatch.ClearCustomShaders();
+
+    // === 復元 ===
+    d3dCtx->OMSetRenderTargets(1, savedRTV.GetAddressOf(), savedDSV.Get());
+    d3dCtx->RSSetViewports(1, &savedViewport);
+
+    // ベイク完了後、不要なリソースを解放
+    accumulationRT_.reset();
+    groundTiles_.clear();
+
+    LOG_INFO("[StageBackground] Ground texture baked successfully");
+}
+
+//----------------------------------------------------------------------------
 void StageBackground::Render(SpriteBatch& spriteBatch)
 {
     // 1. ベース地面テクスチャを敷き詰め
@@ -252,38 +415,25 @@ void StageBackground::Render(SpriteBatch& spriteBatch)
         }
     }
 
-    // ベースを先にフラッシュ
-    spriteBatch.End();
+    // 2. ベイク済み地面テクスチャを描画（1枚のテクスチャ）
+    if (bakedGroundTexture_) {
+        float texW = static_cast<float>(bakedGroundTexture_->Width());
+        float texH = static_cast<float>(bakedGroundTexture_->Height());
+        Vector2 origin(texW * 0.5f, texH * 0.5f);
 
-    // 2. 地面タイル（端フェードシェーダー + プリマルチプライドアルファで描画）
-    if (groundTexture_ && groundVertexShader_ && groundPixelShader_) {
-        spriteBatch.SetCustomShaders(groundVertexShader_.get(), groundPixelShader_.get());
-        if (premultipliedBlendState_) {
-            spriteBatch.SetCustomBlendState(premultipliedBlendState_.get());
-        }
-        spriteBatch.Begin();
-
-        Vector2 origin(tileWidth_ * 0.5f, tileHeight_ * 0.5f);
-        for (const GroundTile& tile : groundTiles_) {
-            spriteBatch.Draw(
-                groundTexture_.get(),
-                tile.position,
-                Color(1.0f, 1.0f, 1.0f, tile.alpha),
-                tile.rotation,
-                origin,
-                Vector2::One,
-                tile.flipX, tile.flipY,
-                -98, 0
-            );
-        }
-
-        spriteBatch.End();
-        spriteBatch.ClearCustomShaders();
-        spriteBatch.ClearCustomBlendState();
+        spriteBatch.Draw(
+            bakedGroundTexture_.get(),
+            Vector2(texW * 0.5f, texH * 0.5f),  // ステージ左上が(0,0)なので中心に配置
+            Colors::White,
+            0.0f,
+            origin,
+            Vector2::One,
+            false, false,
+            -98, 0
+        );
     }
 
     // 3. 装飾描画
-    spriteBatch.Begin();
     for (const DecorationObject& obj : decorations_) {
         if (!obj.texture) continue;
 
@@ -311,9 +461,12 @@ void StageBackground::Shutdown()
     decorations_.clear();
     groundTexture_.reset();
     baseGroundTexture_.reset();
+    bakedGroundTexture_.reset();
     groundVertexShader_.reset();
     groundPixelShader_.reset();
-    premultipliedBlendState_.reset();
+    normalizePixelShader_.reset();
+    accumulationRT_.reset();
+    additiveBlendState_.reset();
 
     LOG_INFO("[StageBackground] Shutdown");
 }

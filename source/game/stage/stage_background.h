@@ -77,7 +77,10 @@ private:
     void AddDecoration(TexturePtr texture, const Vector2& position, int sortingLayer,
                        const Vector2& scale = Vector2::One, float rotation = 0.0f);
 
-    // 地面テクスチャ（タイル用）
+    //! @brief 地面テクスチャをプリベイク
+    void BakeGroundTexture();
+
+    // 地面テクスチャ（タイル用、ベイク時のみ使用）
     TexturePtr groundTexture_;
 
     // ベース地面テクスチャ（敷き詰め用）
@@ -85,12 +88,21 @@ private:
     float baseGroundWidth_ = 0.0f;
     float baseGroundHeight_ = 0.0f;
 
+    // ベイク済み地面テクスチャ（描画時に使用）
+    TexturePtr bakedGroundTexture_;
+
     // 地面タイル用シェーダー（端フェード付き）
     ShaderPtr groundVertexShader_;
     ShaderPtr groundPixelShader_;
 
-    // プリマルチプライドアルファ用ブレンドステート
-    std::unique_ptr<BlendState> premultipliedBlendState_;
+    // 正規化シェーダー（2パス目）
+    ShaderPtr normalizePixelShader_;
+
+    // 蓄積用レンダーターゲット（RGBA16F、ベイク時のみ使用）
+    TexturePtr accumulationRT_;
+
+    // 加算ブレンドステート（蓄積用）
+    std::unique_ptr<BlendState> additiveBlendState_;
 
     // 地面タイル（回転/反転付き）
     std::vector<GroundTile> groundTiles_;
