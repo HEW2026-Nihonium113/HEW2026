@@ -22,13 +22,14 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
     std::random_device rd;
     rng_ = std::mt19937(rd());
 
-    // ベースカラー（草原の緑 - 明るめ）
-    baseColor_ = Color(0.45f, 0.65f, 0.40f, 1.0f);
-
-    // 1x1白テクスチャを作成（ベースカラー描画用）
+    // ベースカラー用1x1テクスチャを作成（sRGB値: R76 G132 B71）
     {
-        uint32_t whitePixel = 0xFFFFFFFF;  // RGBA白
-        whiteTexture_ = Texture::Create2D(1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, &whitePixel);
+        uint8_t r = 76;
+        uint8_t g = 132;
+        uint8_t b = 71;
+        uint8_t a = 255;
+        uint32_t pixel = (a << 24) | (b << 16) | (g << 8) | r;  // ABGR順
+        baseColorTexture_ = Texture::Create2D(1, 1, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, &pixel);
     }
 
     // テクスチャパスのベース
@@ -217,13 +218,13 @@ void StageBackground::AddDecoration(TexturePtr texture, const Vector2& position,
 //----------------------------------------------------------------------------
 void StageBackground::Render(SpriteBatch& spriteBatch)
 {
-    // 1. ベースカラー（単色の緑）を描画
-    if (whiteTexture_) {
+    // 1. ベースカラー（sRGB: R76 G132 B71）を描画
+    if (baseColorTexture_) {
         Vector2 baseScale(stageWidth_, stageHeight_);
         spriteBatch.Draw(
-            whiteTexture_.get(),
+            baseColorTexture_.get(),
             Vector2(stageWidth_ * 0.5f, stageHeight_ * 0.5f),
-            baseColor_,
+            Colors::White,  // 色はテクスチャに焼き込み済み
             0.0f,
             Vector2(0.5f, 0.5f),
             baseScale,
@@ -286,7 +287,7 @@ void StageBackground::Shutdown()
     groundTiles_.clear();
     decorations_.clear();
     groundTexture_.reset();
-    whiteTexture_.reset();
+    baseColorTexture_.reset();
     groundVertexShader_.reset();
     groundPixelShader_.reset();
 

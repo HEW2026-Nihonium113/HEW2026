@@ -79,11 +79,8 @@ private:
     // 地面テクスチャ（タイル用）
     TexturePtr groundTexture_;
 
-    // ベースカラー用の1x1白テクスチャ
-    TexturePtr whiteTexture_;
-
-    // ベースカラー（地面の基本色）
-    Color baseColor_;
+    // ベースカラー用の1x1テクスチャ（sRGB値で作成）
+    TexturePtr baseColorTexture_;
 
     // 地面タイル用シェーダー（端フェード付き）
     ShaderPtr groundVertexShader_;
