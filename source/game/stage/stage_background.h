@@ -6,6 +6,7 @@
 
 #include "dx11/gpu/texture.h"
 #include "dx11/gpu/shader.h"
+#include "dx11/state/blend_state.h"
 #include "engine/math/math_types.h"
 #include "engine/math/color.h"
 #include <vector>
@@ -88,6 +89,9 @@ private:
     // 地面タイル用シェーダー（端フェード付き）
     ShaderPtr groundVertexShader_;
     ShaderPtr groundPixelShader_;
+
+    // プリマルチプライドアルファ用ブレンドステート
+    std::unique_ptr<BlendState> premultipliedBlendState_;
 
     // 地面タイル（回転/反転付き）
     std::vector<GroundTile> groundTiles_;

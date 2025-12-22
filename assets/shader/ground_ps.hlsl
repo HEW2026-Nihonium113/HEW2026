@@ -31,5 +31,8 @@ float4 PSMain(PSInput input) : SV_TARGET {
     float4 result = texColor * input.color;
     result.a *= edgeFade;
 
+    // プリマルチプライドアルファ: RGBにアルファを事前乗算
+    result.rgb *= result.a;
+
     return result;
 }

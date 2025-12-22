@@ -145,6 +145,17 @@ public:
     void ClearCustomShaders();
 
     //------------------------------------------------------------------------
+    //! @brief カスタムブレンドステートを設定（次のEnd()で使用）
+    //! @param blendState ブレンドステート（nullptrでデフォルト）
+    //------------------------------------------------------------------------
+    void SetCustomBlendState(BlendState* blendState);
+
+    //------------------------------------------------------------------------
+    //! @brief カスタムブレンドステートをクリア（デフォルトに戻す）
+    //------------------------------------------------------------------------
+    void ClearCustomBlendState();
+
+    //------------------------------------------------------------------------
     //! @brief 描画統計を取得
     //------------------------------------------------------------------------
     [[nodiscard]] uint32_t GetDrawCallCount() const noexcept { return drawCallCount_; }
@@ -212,6 +223,9 @@ private:
     // カスタムシェーダー（nullptrの場合はデフォルト使用）
     Shader* customVertexShader_ = nullptr;
     Shader* customPixelShader_ = nullptr;
+
+    // カスタムブレンドステート（nullptrの場合はデフォルト使用）
+    BlendState* customBlendState_ = nullptr;
 
     // 統計
     uint32_t drawCallCount_ = 0;

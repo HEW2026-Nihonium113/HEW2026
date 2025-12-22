@@ -477,6 +477,14 @@ void SpriteBatch::ClearCustomShaders() {
     customPixelShader_ = nullptr;
 }
 
+void SpriteBatch::SetCustomBlendState(BlendState* blendState) {
+    customBlendState_ = blendState;
+}
+
+void SpriteBatch::ClearCustomBlendState() {
+    customBlendState_ = nullptr;
+}
+
 void SpriteBatch::SortSprites() {
     // インデックス配列を初期化
     uint32_t count = static_cast<uint32_t>(spriteQueue_.size());
@@ -522,7 +530,9 @@ void SpriteBatch::FlushBatch() {
     ctx.SetPixelShader(ps);
     ctx.SetPSSampler(0, samplerState_.get());
 
-    ctx.SetBlendState(blendState_.get());
+    // カスタムブレンドステートがあれば使用、なければデフォルト
+    BlendState* bs = customBlendState_ ? customBlendState_ : blendState_.get();
+    ctx.SetBlendState(bs);
     ctx.SetDepthStencilState(depthStencilState_.get());
     ctx.SetRasterizerState(rasterizerState_.get());
 

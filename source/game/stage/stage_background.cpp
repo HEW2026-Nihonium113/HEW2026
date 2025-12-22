@@ -87,6 +87,12 @@ void StageBackground::Initialize(const std::string& stageId, float screenWidth, 
         LOG_WARN("[StageBackground] Ground shaders not loaded, using default");
     }
 
+    // プリマルチプライドアルファ用ブレンドステート作成
+    premultipliedBlendState_ = BlendState::CreatePremultipliedAlpha();
+    if (premultipliedBlendState_) {
+        LOG_INFO("[StageBackground] Premultiplied alpha blend state created");
+    }
+
     // 装飾を配置
     PlaceDecorations(stageId, screenWidth, screenHeight);
 
@@ -235,9 +241,12 @@ void StageBackground::Render(SpriteBatch& spriteBatch)
     // ベースを先にフラッシュ
     spriteBatch.End();
 
-    // 2. 地面タイル（端フェードシェーダーで描画）
+    // 2. 地面タイル（端フェードシェーダー + プリマルチプライドアルファで描画）
     if (groundTexture_ && groundVertexShader_ && groundPixelShader_) {
         spriteBatch.SetCustomShaders(groundVertexShader_.get(), groundPixelShader_.get());
+        if (premultipliedBlendState_) {
+            spriteBatch.SetCustomBlendState(premultipliedBlendState_.get());
+        }
         spriteBatch.Begin();
 
         Vector2 origin(tileWidth_ * 0.5f, tileHeight_ * 0.5f);
@@ -256,6 +265,7 @@ void StageBackground::Render(SpriteBatch& spriteBatch)
 
         spriteBatch.End();
         spriteBatch.ClearCustomShaders();
+        spriteBatch.ClearCustomBlendState();
     }
 
     // 3. 装飾描画
@@ -289,6 +299,7 @@ void StageBackground::Shutdown()
     whiteTexture_.reset();
     groundVertexShader_.reset();
     groundPixelShader_.reset();
+    premultipliedBlendState_.reset();
 
     LOG_INFO("[StageBackground] Shutdown");
 }
