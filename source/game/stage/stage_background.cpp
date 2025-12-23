@@ -22,14 +22,14 @@ constexpr float STAGE_WIDTH  = 5120.0f;
 constexpr float STAGE_HEIGHT = 2880.0f;
 
 //----------------------------------------------------------------------------
-// BC7圧縮ヘルパー関数
+// BC1圧縮ヘルパー関数
 //----------------------------------------------------------------------------
 namespace
 {
-    //! @brief レンダーターゲットをBC7圧縮してテクスチャを作成
+    //! @brief レンダーターゲットをBC1圧縮してテクスチャを作成
     //! @param sourceRT 圧縮元のレンダーターゲット
-    //! @return BC7圧縮されたテクスチャ（失敗時nullptr）
-    TexturePtr CompressToBC7(Texture* sourceRT)
+    //! @return BC1圧縮されたテクスチャ（失敗時nullptr）
+    TexturePtr CompressToBC1(Texture* sourceRT)
     {
         if (!sourceRT) return nullptr;
 
@@ -54,7 +54,7 @@ namespace
         ComPtr<ID3D11Texture2D> stagingTexture;
         HRESULT hr = device->CreateTexture2D(&stagingDesc, nullptr, &stagingTexture);
         if (FAILED(hr)) {
-            LOG_ERROR("[CompressToBC7] ステージングテクスチャの作成に失敗");
+            LOG_ERROR("[CompressToBC1] ステージングテクスチャの作成に失敗");
             return nullptr;
         }
 
@@ -65,7 +65,7 @@ namespace
         D3D11_MAPPED_SUBRESOURCE mapped{};
         hr = context->Map(stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
         if (FAILED(hr)) {
-            LOG_ERROR("[CompressToBC7] ステージングテクスチャのマップに失敗");
+            LOG_ERROR("[CompressToBC1] ステージングテクスチャのマップに失敗");
             return nullptr;
         }
 
@@ -74,7 +74,7 @@ namespace
         hr = srcImage.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, 1);
         if (FAILED(hr)) {
             context->Unmap(stagingTexture.Get(), 0);
-            LOG_ERROR("[CompressToBC7] ScratchImageの初期化に失敗");
+            LOG_ERROR("[CompressToBC1] ScratchImageの初期化に失敗");
             return nullptr;
         }
 
@@ -99,7 +99,7 @@ namespace
             0.5f,
             compressedImage);
         if (FAILED(hr)) {
-            LOG_ERROR("[CompressToBC7] BC1圧縮に失敗: HRESULT=" + std::to_string(hr));
+            LOG_ERROR("[CompressToBC1] BC1圧縮に失敗: HRESULT=" + std::to_string(hr));
             return nullptr;
         }
 
@@ -123,7 +123,7 @@ namespace
         ComPtr<ID3D11Texture2D> compressedTexture;
         hr = device->CreateTexture2D(&texDesc, &initData, &compressedTexture);
         if (FAILED(hr)) {
-            LOG_ERROR("[CompressToBC7] 圧縮テクスチャの作成に失敗");
+            LOG_ERROR("[CompressToBC1] 圧縮テクスチャの作成に失敗");
             return nullptr;
         }
 
@@ -136,7 +136,7 @@ namespace
         ComPtr<ID3D11ShaderResourceView> srv;
         hr = device->CreateShaderResourceView(compressedTexture.Get(), &srvDesc, &srv);
         if (FAILED(hr)) {
-            LOG_ERROR("[CompressToBC7] SRVの作成に失敗");
+            LOG_ERROR("[CompressToBC1] SRVの作成に失敗");
             return nullptr;
         }
 
@@ -157,7 +157,7 @@ namespace
             ComPtr<ID3D11UnorderedAccessView>(nullptr),
             desc);
 
-        LOG_INFO("[CompressToBC7] BC1圧縮完了: " + std::to_string(width) + "x" + std::to_string(height) +
+        LOG_INFO("[CompressToBC1] BC1圧縮完了: " + std::to_string(width) + "x" + std::to_string(height) +
                  " (VRAM: " + std::to_string(width * height / 2 / 1024 / 1024) + "MB)");
         return result;
     }
@@ -550,14 +550,14 @@ void StageBackground::BakeGroundTexture()
 
     LOG_INFO("[StageBackground] Ground texture baked successfully");
 
-    // BC7圧縮でVRAM節約（59MB → 15MB）
-    LOG_INFO("[StageBackground] BC7圧縮中...");
-    TexturePtr compressedTexture = CompressToBC7(bakedGroundTexture_.get());
+    // BC1圧縮でVRAM節約（59MB → 7MB）
+    LOG_INFO("[StageBackground] BC1圧縮中...");
+    TexturePtr compressedTexture = CompressToBC1(bakedGroundTexture_.get());
     if (compressedTexture) {
         bakedGroundTexture_ = compressedTexture;
-        LOG_INFO("[StageBackground] BC7圧縮完了、VRAMを節約しました");
+        LOG_INFO("[StageBackground] BC1圧縮完了、VRAMを節約しました");
     } else {
-        LOG_WARN("[StageBackground] BC7圧縮に失敗、非圧縮テクスチャを使用します");
+        LOG_WARN("[StageBackground] BC1圧縮に失敗、非圧縮テクスチャを使用します");
     }
 }
 
@@ -623,12 +623,8 @@ void StageBackground::SplitIntoChunks()
 }
 
 //----------------------------------------------------------------------------
-void StageBackground::Render(SpriteBatch& spriteBatch, const Camera2D& camera)
+void StageBackground::Render(SpriteBatch& spriteBatch, [[maybe_unused]] const Camera2D& camera)
 {
-    // カメラの可視範囲を取得
-    Vector2 viewMin, viewMax;
-    camera.GetWorldBounds(viewMin, viewMax);
-
     // 1. ベース地面カラーを描画（1x1テクスチャをステージ全体にスケール）
     if (baseGroundTexture_) {
         Vector2 origin(0.5f, 0.5f);  // 1x1テクスチャの中心

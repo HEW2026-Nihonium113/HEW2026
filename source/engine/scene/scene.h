@@ -7,6 +7,7 @@
 #include <string>
 #include <cstdint>
 #include <atomic>
+#include <algorithm>
 
 //----------------------------------------------------------------------------
 //! @brief シーン基底クラス
@@ -53,7 +54,7 @@ public:
     virtual void OnLoadComplete() {}
 
     //! @brief ロード進捗を設定（0.0〜1.0）
-    void SetLoadProgress(float progress) { loadProgress_.store(progress); }
+    void SetLoadProgress(float progress) { loadProgress_.store(std::clamp(progress, 0.0f, 1.0f)); }
 
     //! @brief ロード進捗を取得
     [[nodiscard]] float GetLoadProgress() const { return loadProgress_.load(); }

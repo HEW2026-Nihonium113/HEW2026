@@ -283,6 +283,9 @@ void SpriteBatch::Draw(
     // テクスチャサイズ取得
     float texWidth = static_cast<float>(texture->Width());
     float texHeight = static_cast<float>(texture->Height());
+    if (texWidth <= 0.0f || texHeight <= 0.0f) {
+        return;
+    }
 
     // ソース矩形からUV座標を計算（ピクセル→正規化）
     float u0 = sourceRect.x / texWidth;
