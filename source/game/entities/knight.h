@@ -89,5 +89,6 @@ private:
     float swingAngle_ = 0.0f;           //!< 現在の剣の角度（度）
     Vector2 swingDirection_;            //!< 剣を振る方向（ターゲット方向）
     bool hasHitTarget_ = false;         //!< この振りでターゲットにヒットしたか
+    Individual* attackTarget_ = nullptr; //!< 攻撃対象（Attack用）
     Player* playerTarget_ = nullptr;    //!< プレイヤーターゲット（AttackPlayer用）
 };

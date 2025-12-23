@@ -126,8 +126,8 @@ void Renderer::Shutdown() noexcept
     }
 
     LOG_INFO("[Renderer] 終了処理開始...");
-    LOG_INFO("[Renderer] depthBuffer use_count: " + std::to_string(depthBuffer_.use_count()));
-    LOG_INFO("[Renderer] colorBuffer use_count: " + std::to_string(colorBuffer_.use_count()));
+    LOG_DEBUG("[Renderer] depthBuffer use_count: " + std::to_string(depthBuffer_.use_count()));
+    LOG_DEBUG("[Renderer] colorBuffer use_count: " + std::to_string(colorBuffer_.use_count()));
 
     depthBuffer_.reset();
     colorBuffer_.reset();

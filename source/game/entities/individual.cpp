@@ -210,7 +210,7 @@ void Individual::SetupCollider()
 {
     if (!gameObject_) return;
 
-    collider_ = gameObject_->AddComponent<Collider2D>(Vector2(32, 32));
+    collider_ = gameObject_->AddComponent<Collider2D>(Vector2(kDefaultColliderSize, kDefaultColliderSize));
     collider_->SetLayer(CollisionLayer::Individual);
     collider_->SetMask(CollisionLayer::IndividualMask);
 
@@ -254,7 +254,7 @@ void Individual::CalculateSeparation(const std::vector<Individual*>& others)
         float distance = diff.Length();
 
         // 距離が分離半径内かつ0より大きい場合
-        if (distance < separationRadius_ && distance > 0.001f) {
+        if (distance < separationRadius_ && distance > kMinDistanceThreshold) {
             // 離れる方向に力を加える
             diff.Normalize();
             float strength = (separationRadius_ - distance) / separationRadius_;
@@ -402,8 +402,7 @@ void Individual::UpdateDesiredVelocity()
             float distance = diff.Length();
 
             // 閾値以上離れていれば移動
-            constexpr float kThreshold = 5.0f;
-            if (distance > kThreshold) {
+            if (distance > kFormationThreshold) {
                 diff.Normalize();
                 desiredVelocity_ = diff * moveSpeed_;
             }
@@ -419,7 +418,7 @@ void Individual::UpdateDesiredVelocity()
             Vector2 diff = targetPos - myPos;
             float distance = diff.Length();
 
-            if (distance > 0.001f) {
+            if (distance > kMinDistanceThreshold) {
                 diff.Normalize();
                 desiredVelocity_ = diff * moveSpeed_;
             }

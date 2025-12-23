@@ -211,6 +211,11 @@ public:
     [[nodiscard]] const AnimationController& GetAnimationController() const { return animationController_; }
 
 protected:
+    // 定数
+    static constexpr float kDefaultColliderSize = 32.0f;    //!< デフォルトコライダーサイズ
+    static constexpr float kMinDistanceThreshold = 0.001f;  //!< 零除算防止用の最小距離
+    static constexpr float kFormationThreshold = 5.0f;      //!< フォーメーション復帰判定の距離閾値
+
     //! @brief テクスチャをセットアップ（派生クラスで実装）
     virtual void SetupTexture() = 0;
 

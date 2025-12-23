@@ -24,8 +24,11 @@ CombatSystem& CombatSystem::Get()
 //----------------------------------------------------------------------------
 void CombatSystem::Update(float dt)
 {
+    // コールバック中の変更に備えてコピーを作成
+    std::vector<Group*> groupsCopy = groups_;
+
     // 各グループの個体クールダウン更新と戦闘処理
-    for (Group* attacker : groups_) {
+    for (Group* attacker : groupsCopy) {
         if (!attacker || attacker->IsDefeated()) continue;
 
         // 全個体のクールダウン更新
@@ -54,7 +57,7 @@ void CombatSystem::Update(float dt)
     }
 
     // 全滅チェック（各グループにつき一度だけ処理）
-    for (Group* group : groups_) {
+    for (Group* group : groupsCopy) {
         if (group && group->IsDefeated()) {
             // 既に処理済みならスキップ
             if (defeatedGroups_.count(group) > 0) continue;
@@ -115,9 +118,9 @@ Group* CombatSystem::SelectTarget(Group* attacker) const
     Vector2 attackerPos = attacker->GetPosition();
     float detectionRange = attacker->GetDetectionRange();
 
-    LOG_INFO("[SelectTarget] " + attacker->GetId() + " pos=(" +
-             std::to_string(attackerPos.x) + "," + std::to_string(attackerPos.y) +
-             ") range=" + std::to_string(detectionRange));
+    LOG_DEBUG("[SelectTarget] " + attacker->GetId() + " pos=(" +
+              std::to_string(attackerPos.x) + "," + std::to_string(attackerPos.y) +
+              ") range=" + std::to_string(detectionRange));
 
     for (Group* candidate : groups_) {
         if (!candidate || candidate == attacker) continue;
@@ -127,8 +130,8 @@ Group* CombatSystem::SelectTarget(Group* attacker) const
         Vector2 candidatePos = candidate->GetPosition();
         float distance = (candidatePos - attackerPos).Length();
 
-        LOG_INFO("  -> " + candidate->GetId() + " dist=" + std::to_string(distance) +
-                 " hostile=" + std::to_string(AreHostile(attacker, candidate)));
+        LOG_DEBUG("  -> " + candidate->GetId() + " dist=" + std::to_string(distance) +
+                  " hostile=" + std::to_string(AreHostile(attacker, candidate)));
 
         if (distance > detectionRange) continue;
 
@@ -240,8 +243,8 @@ void CombatSystem::ProcessCombat(Group* attacker, Group* defender, float /*dt*/)
     float distance = (defenderPos - attackerPos).Length();
     float attackRange = attackerIndividual->GetAttackRange();
 
-    LOG_INFO("[ProcessCombat] " + attackerIndividual->GetId() + " -> " + defenderIndividual->GetId() +
-             " dist=" + std::to_string(distance) + " range=" + std::to_string(attackRange));
+    LOG_DEBUG("[ProcessCombat] " + attackerIndividual->GetId() + " -> " + defenderIndividual->GetId() +
+              " dist=" + std::to_string(distance) + " range=" + std::to_string(attackRange));
 
     if (distance > attackRange) {
         return; // 攻撃範囲外
