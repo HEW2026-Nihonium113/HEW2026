@@ -29,8 +29,8 @@ void Result_Scene::Update()
 {
 	auto& input = *InputManager::GetInstance();
 
-	//space or enterがおされたら
-	if (input.GetKeyboard().IsKeyDown(Key::Enter))
+	// SpaceまたはEnterが押されたら
+	if (input.GetKeyboard().IsKeyDown(Key::Enter) || input.GetKeyboard().IsKeyDown(Key::Space))
 	{
 		//Titleシーンへの画面遷移
 		SceneManager::Get().Load<Title_Scene>();

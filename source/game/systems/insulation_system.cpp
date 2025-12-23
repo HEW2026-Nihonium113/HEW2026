@@ -33,11 +33,10 @@ void InsulationSystem::AddInsulation(const BondableEntity& a, const BondableEnti
 {
     auto key = MakePairKey(a, b);
 
-    if (insulatedPairs_.find(key) != insulatedPairs_.end()) {
+    auto [it, inserted] = insulatedPairs_.insert(key);
+    if (!inserted) {
         return; // 既に絶縁済み
     }
-
-    insulatedPairs_.insert(key);
 
     LOG_INFO("[InsulationSystem] Insulation added: " + key.first + " <-> " + key.second);
 

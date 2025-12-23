@@ -48,12 +48,6 @@ bool GraphicsDevice::Initialize(bool enableDebug)
     hr = device.As(&device_);
     RETURN_FALSE_IF_FAILED(hr, "[GraphicsDevice] ID3D11Device5へのアップグレードに失敗しました");
 
-    // GraphicsContext を初期化
-  //  if (!GraphicsContext::Get().Initialize()) {
-  //      device_.Reset();
-  //      RETURN_FALSE_IF_FALSE(false, "[GraphicsDevice] GraphicsContextの初期化に失敗しました");
-  //  }
-
     return true;
 }
 

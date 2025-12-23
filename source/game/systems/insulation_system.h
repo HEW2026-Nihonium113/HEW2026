@@ -7,6 +7,7 @@
 #include "game/bond/bondable_entity.h"
 #include <set>
 #include <functional>
+#include <utility>
 
 //----------------------------------------------------------------------------
 //! @brief 絶縁システム（シングルトン）
