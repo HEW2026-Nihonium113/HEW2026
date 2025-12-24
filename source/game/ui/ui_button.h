@@ -36,7 +36,7 @@ private:
     Vector2 size_;       // ボタンの幅と高さ
 
     // 各状態の色
-    Color normalColor_ = Color(0.3f, 0.3f, 0.3f, 1.0f);  // 通常: 暗いグレー
+    Color normalColor_ = Color(0.0f, 1.0f, 0.0f, 0.8f);  // 通常: 暗いグレー
     Color hoverColor_ = Color(0.5f, 0.5f, 0.5f, 1.0f);  // ホバー: 明るいグレー
     Color pressColor_ = Color(0.2f, 0.2f, 0.2f, 1.0f);  // 押下: より暗いグレー
 

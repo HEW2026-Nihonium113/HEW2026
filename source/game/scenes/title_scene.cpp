@@ -24,13 +24,13 @@ void Title_Scene::OnEnter()
 	(
 		//座標,サイズ
 		Vector2(640.0f,400.0f),
-		Vector2(200.0f,500.0f)
+		Vector2(200.0f,100.0f)
 	);
 	
 	startButton_->SetOnClick
 	([]()
-		{SceneManager::Get().Load<TestScene>(); 
-	});
+		{SceneManager::Get().Load<TestScene>();}
+	);
 
 	startButton_->SetNormalColor(Color(0.2f, 0.5f, 0.2f, 1.0f));
 	startButton_->SetHoverColor(Color(0.5f, 0.5f, 0.5f, 1.0f));
@@ -88,6 +88,14 @@ void Title_Scene::Render()
 	ctx.ClearRenderTarget(backBuffer, clearColor);
 	ctx.ClearDepthStencil(depthBuffer, 1.0f, 0);
 
+	SpriteBatch& batch = SpriteBatch::Get();
+	if (camera_)
+	{
+		batch.SetCamera(*camera_);
+	}
+	batch.Begin();
 
 	startButton_->Render();
+
+	batch.End();
 }
