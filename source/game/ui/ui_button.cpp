@@ -17,7 +17,7 @@ bool UIButton::IsMouseOver() const
 	if (!input) return false;
 
 	//マウスの座標取得
-	Vector2 mouse = { input->GetMouse().GetX(),input->GetMouse().GetY() };
+	Vector2 mouse = {(float)input->GetMouse().GetX(),(float)input->GetMouse().GetY() };
 
 	//ボタンの範囲を計算
 	float left = position_.x - size_.x * 0.5f;
@@ -61,7 +61,7 @@ void UIButton::Render()
 	Color color = normalColor_;
 	
 	//マウスがボタンの範囲内ならクリック判定
-	if (IsMouseOver)
+	if (IsMouseOver())
 	{
 		//押下しているか
 		if (input->GetMouse().IsButtonPressed(MouseButton::Left))
