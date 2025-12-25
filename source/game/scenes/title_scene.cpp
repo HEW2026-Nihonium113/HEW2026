@@ -15,14 +15,36 @@
 void Title_Scene::OnEnter()
 {
 	LOG_INFO("現在のシーン : タイトル");
-	camera_ = std::make_unique<Camera2D>();
+
 	//画面中央
-	camera_->SetPosition(Vector2(640.0f, 360.0f));
+	cameraObj_ = std::make_unique<GameObject>("Camera");
+	cameraObj_->AddComponent<Transform2D>(Vector2(640.0f, 360.0f));
+	camera_ = cameraObj_->AddComponent<Camera2D>(1280.0f, 720.0f);
+
+	
+	startButton_ = std::make_unique<UIButton>
+	(
+		//座標,サイズ
+		Vector2(640.0f,400.0f),
+		Vector2(200.0f,100.0f)
+	);
+	
+	startButton_->SetOnClick
+	([]()
+		{SceneManager::Get().Load<TestScene>();}
+	);
+
+	startButton_->SetNormalColor(Color(0.2f, 0.5f, 0.2f, 1.0f));
+	startButton_->SetHoverColor(Color(0.5f, 0.5f, 0.5f, 1.0f));
+
+
 }
+
 //破棄
 void Title_Scene::OnExit()
 {
-	camera_.reset();
+	cameraObj_.reset();
+	startButton_.reset();
 }
 
 //フレームコールバック
@@ -43,6 +65,8 @@ void Title_Scene::Update()
 	{
 		PostQuitMessage(0);
 	}
+
+	startButton_->Update();
 }
 
 //描画
@@ -64,4 +88,16 @@ void Title_Scene::Render()
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	ctx.ClearRenderTarget(backBuffer, clearColor);
 	ctx.ClearDepthStencil(depthBuffer, 1.0f, 0);
+
+	SpriteBatch& batch = SpriteBatch::Get();
+
+
+	batch.Begin();
+	batch.SetCamera(*camera_);
+
+	startButton_->Render();
+
+	DEBUG_RECT_FILL(startButton_->GetPosition(),startButton_->GetSize(),startButton_->GetColor());
+
+	batch.End();
 }

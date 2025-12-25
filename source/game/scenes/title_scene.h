@@ -4,6 +4,8 @@
 #include "engine/component/camera2d.h"
 #include <memory>
 
+#include"game/ui/ui_button.h"
+
 
 class Title_Scene : public Scene
 {
@@ -11,8 +13,16 @@ class Title_Scene : public Scene
 private:
 	//コンポーネント呼び出し
 	//カメラ
-	std::unique_ptr<Camera2D> camera_;
+	//std::unique_ptr<Camera2D> camera_;
 
+
+	//スタートボタンテスト
+	std::unique_ptr<UIButton> startButton_;
+
+
+	// カメラ
+	std::unique_ptr<GameObject> cameraObj_;
+	Camera2D* camera_ = nullptr;
 
 
 //パブリック
