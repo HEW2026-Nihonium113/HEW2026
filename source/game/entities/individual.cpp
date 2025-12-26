@@ -10,6 +10,7 @@
 #include "game/systems/friends_damage_sharing.h"
 #include "game/systems/time_manager.h"
 #include "game/bond/bondable_entity.h"
+#include "game/systems/animation/anim_state.h"
 #include "engine/c_systems/sprite_batch.h"
 #include "engine/c_systems/collision_manager.h"
 #include "engine/c_systems/collision_layers.h"
@@ -49,8 +50,9 @@ void Individual::Initialize(const Vector2& position)
         SetupAnimator();
     }
 
-    // AnimationController
-    SetupAnimationController();
+    // StateMachine
+    stateMachine_ = std::make_unique<IndividualStateMachine>(this, animator_);
+    SetupStateMachine();
 
     // Collider
     SetupCollider();
@@ -95,8 +97,10 @@ void Individual::Update(float dt)
 
     // 死亡状態でもアニメは更新
     if (!IsAlive()) {
-        animationController_.RequestState(AnimationState::Death);
-        animationController_.Update(scaledDt);
+        if (stateMachine_) {
+            stateMachine_->Die();
+            stateMachine_->Update(scaledDt);
+        }
         gameObject_->Update(scaledDt);
         prevPosition_ = GetPosition();
         return;
@@ -104,15 +108,6 @@ void Individual::Update(float dt)
 
     // 攻撃クールダウン更新
     UpdateAttackCooldown(scaledDt);
-
-    // 攻撃持続タイマー更新
-    if (isAttacking_ && attackDurationTimer_ > 0.0f) {
-        attackDurationTimer_ -= scaledDt;
-        if (attackDurationTimer_ <= 0.0f) {
-            // 攻撃終了
-            EndAttack();
-        }
-    }
 
     // 行動状態を更新（グループAIの状態に基づく）
     UpdateAction();
@@ -134,12 +129,15 @@ void Individual::Update(float dt)
     // 向き更新（意図ベース）
     UpdateFacingDirection();
 
-    // AnimationController更新（アニメ終了検出→ロック解除）
-    animationController_.Update(scaledDt);
+    // StateMachine更新
+    if (stateMachine_) {
+        // Walk/Idle遷移をリクエスト（ヒステリシス付き）
+        bool shouldWalk = (action_ == IndividualAction::Walk) ||
+                          (action_ == IndividualAction::Attack && !IsAttacking());
+        stateMachine_->RequestWalkOrIdle(shouldWalk);
 
-    // アニメーション状態決定（意図ベース）- ロック解除後に実行
-    AnimationState animState = DetermineAnimationState();
-    animationController_.RequestState(animState);
+        stateMachine_->Update(scaledDt);
+    }
 
     // GameObjectの更新（Animatorの更新など、スケール済み時間で）
     gameObject_->Update(scaledDt);
@@ -224,24 +222,28 @@ void Individual::SetupAnimator()
 }
 
 //----------------------------------------------------------------------------
-void Individual::SetupAnimationController()
+void Individual::SetupStateMachine()
 {
-    // Animatorを設定
-    animationController_.SetAnimator(animator_);
+    if (!stateMachine_) return;
 
     // デフォルトの行マッピング（派生クラスでオーバーライド可能）
     // Row 0: Idle, Row 1: Walk, Row 2: Attack, Row 3: Death
-    animationController_.SetRowMapping(AnimationState::Idle, 0);
-    animationController_.SetRowMapping(AnimationState::Walk, 1);
-    animationController_.SetRowMapping(AnimationState::Attack, 2);
-    animationController_.SetRowMapping(AnimationState::Death, 3);
+    stateMachine_->SetRowMapping(AnimState::Idle, 0);
+    stateMachine_->SetRowMapping(AnimState::Walk, 1);
+    stateMachine_->SetRowMapping(AnimState::AttackWindup, 2);
+    stateMachine_->SetRowMapping(AnimState::AttackActive, 2);
+    stateMachine_->SetRowMapping(AnimState::AttackRecovery, 2);
+    stateMachine_->SetRowMapping(AnimState::Death, 3);
 
-    // アニメーション終了時のコールバック
-    animationController_.SetOnAnimationFinished([this]() {
-        // 攻撃終了処理
-        if (action_ == IndividualAction::Attack) {
-            EndAttack();
-        }
+    // 攻撃終了時のコールバック
+    stateMachine_->SetOnAttackEnd([this]() {
+        EndAttack();
+    });
+
+    // 死亡時のコールバック
+    stateMachine_->SetOnDeath([this]() {
+        action_ = IndividualAction::Death;
+        LOG_INFO("[Individual] " + id_ + " death animation started");
     });
 }
 
@@ -333,26 +335,23 @@ void Individual::UpdateAction()
         return;
     }
 
-    // 攻撃モーション中は状態変えない（AnimationControllerがロック中の場合のみ）
-    if (action_ == IndividualAction::Attack && animationController_.IsLocked()) {
-        return;
-    }
-
     AIState groupState = ai->GetState();
 
-    // グループがFlee → Walk
-    if (groupState == AIState::Flee) {
+    // グループがFlee/Wander → 攻撃中でも強制的にWalkに変更（移動優先）
+    if (groupState == AIState::Flee || groupState == AIState::Wander) {
+        // 攻撃中またはStateMachineがロック中なら強制解除
+        if (IsAttacking() || (stateMachine_ && stateMachine_->IsLocked())) {
+            InterruptAttack();
+        }
         action_ = IndividualAction::Walk;
         attackTarget_ = nullptr;
         justEnteredAttackRange_ = false;
         return;
     }
 
-    // グループがWander → Walk（グループは徘徊中で移動している）
-    if (groupState == AIState::Wander) {
-        action_ = IndividualAction::Walk;
-        attackTarget_ = nullptr;
-        justEnteredAttackRange_ = false;
+    // 攻撃モーション中は状態変えない（StateMachineがロック中の場合のみ）
+    // ※Seek状態での攻撃中のみ適用
+    if (action_ == IndividualAction::Attack && stateMachine_ && stateMachine_->IsLocked()) {
         return;
     }
 
@@ -368,6 +367,14 @@ void Individual::UpdateAction()
 
     // ターゲットがない/無効な場合はWalk（グループは移動中）
     if (!targetGroup || targetGroup->IsDefeated()) {
+        action_ = IndividualAction::Walk;
+        attackTarget_ = nullptr;
+        justEnteredAttackRange_ = false;
+        return;
+    }
+
+    // グループが移動中は攻撃しない（移動と攻撃を分離）
+    if (ai->IsMoving()) {
         action_ = IndividualAction::Walk;
         attackTarget_ = nullptr;
         justEnteredAttackRange_ = false;
@@ -392,9 +399,9 @@ void Individual::UpdateAction()
         action_ = IndividualAction::Attack;
         // 攻撃開始時にターゲット個体を選択
         SelectAttackTarget();
-        // ターゲットが見つかったら攻撃開始
-        if (attackTarget_) {
-            StartAttack();
+        // ターゲットが見つかったら攻撃開始（未攻撃時のみ）
+        if (attackTarget_ && !IsAttacking()) {
+            StartAttack(attackTarget_);
         }
     } else {
         // 射程外 → Walk
@@ -409,6 +416,20 @@ bool Individual::CanAttackNow() const
 {
     // 攻撃範囲に入った直後、またはクールダウン完了
     return justEnteredAttackRange_ || attackCooldown_ <= 0.0f;
+}
+
+//----------------------------------------------------------------------------
+bool Individual::CanInterruptAttack() const
+{
+    // 攻撃していなければ中断可能
+    if (!IsAttacking()) return true;
+
+    // StateMachineに問い合わせ
+    if (stateMachine_) {
+        return stateMachine_->CanInterruptAttack();
+    }
+
+    return true;
 }
 
 //----------------------------------------------------------------------------
@@ -434,7 +455,7 @@ void Individual::UpdateDesiredVelocity()
     if (!IsAlive() || !ownerGroup_) return;
 
     // 攻撃中は移動しない
-    if (isAttacking_) {
+    if (IsAttacking()) {
         return;
     }
 
@@ -549,23 +570,40 @@ void Individual::SelectAttackTarget()
 }
 
 //----------------------------------------------------------------------------
-void Individual::StartAttack()
+bool Individual::IsAttacking() const
 {
-    isAttacking_ = true;
-    attackDurationTimer_ = kAttackDuration;  // 攻撃持続時間を設定
-    // AnimationControllerが攻撃アニメをロック中になる
-    // RequestState(Attack)は Update() で呼ばれる
+    if (stateMachine_) {
+        return stateMachine_->IsAttacking();
+    }
+    return false;
+}
+
+//----------------------------------------------------------------------------
+bool Individual::StartAttack(Individual* target)
+{
+    if (!stateMachine_) return false;
+
+    // StateMachineに攻撃開始を委譲
+    bool started = stateMachine_->StartAttack(target);
+    if (started) {
+        attackTarget_ = target;
+    }
+    return started;
+}
+
+//----------------------------------------------------------------------------
+bool Individual::StartAttackPlayer(Player* target)
+{
+    if (!stateMachine_) return false;
+
+    // StateMachineに攻撃開始を委譲
+    bool started = stateMachine_->StartAttackPlayer(target);
+    return started;
 }
 
 //----------------------------------------------------------------------------
 void Individual::EndAttack()
 {
-    isAttacking_ = false;
-    attackDurationTimer_ = 0.0f;
-
-    // アニメーションロックを解除
-    animationController_.ForceUnlock();
-
     // 攻撃終了後、ターゲットが死亡していれば再選択
     if (attackTarget_ && !attackTarget_->IsAlive()) {
         SelectAttackTarget();
@@ -578,15 +616,14 @@ void Individual::EndAttack()
 //----------------------------------------------------------------------------
 void Individual::InterruptAttack()
 {
+    // StateMachineに中断を委譲
+    if (stateMachine_) {
+        stateMachine_->ForceInterrupt();
+    }
+
     // 攻撃状態をリセット
-    isAttacking_ = false;
-    attackDurationTimer_ = 0.0f;
     action_ = IndividualAction::Idle;
     attackTarget_ = nullptr;
-
-    // アニメーションロックを強制解除し、即座にIdleアニメーションをリクエスト
-    animationController_.ForceUnlock();
-    animationController_.RequestState(AnimationState::Idle);
 }
 
 //----------------------------------------------------------------------------
@@ -658,66 +695,26 @@ IndividualIntent Individual::GetIndividualIntent() const
 //----------------------------------------------------------------------------
 AnimationState Individual::DetermineAnimationState() const
 {
-    IndividualIntent indIntent = GetIndividualIntent();
-    GroupIntent grpIntent = GetGroupIntent();
-
-#ifdef _DEBUG
-    // デバッグ: 意図とアニメーション状態をログ
-    if (++debugLogCounter_ % 60 == 0) {  // 1秒に1回
-        std::string indIntentStr;
-        switch (indIntent) {
-        case IndividualIntent::AtSlot: indIntentStr = "AtSlot"; break;
-        case IndividualIntent::MovingToSlot: indIntentStr = "MovingToSlot"; break;
-        case IndividualIntent::ChasingTarget: indIntentStr = "ChasingTarget"; break;
-        case IndividualIntent::Attacking: indIntentStr = "Attacking"; break;
-        case IndividualIntent::Dead: indIntentStr = "Dead"; break;
-        }
-        std::string grpIntentStr;
-        switch (grpIntent) {
-        case GroupIntent::Idle: grpIntentStr = "Idle"; break;
-        case GroupIntent::Wander: grpIntentStr = "Wander"; break;
-        case GroupIntent::Seek: grpIntentStr = "Seek"; break;
-        case GroupIntent::Flee: grpIntentStr = "Flee"; break;
-        }
-        std::string ctrlStateStr;
-        switch (animationController_.GetState()) {
-        case AnimationState::Idle: ctrlStateStr = "Idle"; break;
-        case AnimationState::Walk: ctrlStateStr = "Walk"; break;
-        case AnimationState::Attack: ctrlStateStr = "Attack"; break;
-        case AnimationState::Death: ctrlStateStr = "Death"; break;
-        default: ctrlStateStr = "?"; break;
-        }
-        LOG_INFO("[AnimState] " + id_ + " IndIntent=" + indIntentStr + " GrpIntent=" + grpIntentStr +
-                 " action=" + std::to_string(static_cast<int>(action_)) +
-                 " ctrlState=" + ctrlStateStr + " locked=" + (animationController_.IsLocked() ? "Y" : "N"));
+    // StateMachineで状態管理するため、この関数は後方互換性のみ
+    if (!stateMachine_) {
+        return AnimationState::Idle;
     }
-#endif
 
-    // 死亡・攻撃は最優先
-    if (indIntent == IndividualIntent::Dead) {
+    AnimState state = stateMachine_->GetState();
+
+    switch (state) {
+    case AnimState::Death:
         return AnimationState::Death;
-    }
-    if (indIntent == IndividualIntent::Attacking) {
+    case AnimState::AttackWindup:
+    case AnimState::AttackActive:
+    case AnimState::AttackRecovery:
         return AnimationState::Attack;
-    }
-
-    // グループが実際に移動中 → Walk
-    if (grpIntent != GroupIntent::Idle) {
+    case AnimState::Walk:
         return AnimationState::Walk;
+    case AnimState::Idle:
+    default:
+        return AnimationState::Idle;
     }
-
-    // グループ停止中：個体の状態で判定
-    if (indIntent == IndividualIntent::MovingToSlot ||
-        indIntent == IndividualIntent::ChasingTarget) {
-        return AnimationState::Walk;
-    }
-
-    // 実際に位置が変化している場合もWalk（LovePull等による移動）
-    if (isActuallyMoving_) {
-        return AnimationState::Walk;
-    }
-
-    return AnimationState::Idle;
 }
 
 //----------------------------------------------------------------------------

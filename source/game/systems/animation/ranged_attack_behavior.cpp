@@ -1,0 +1,126 @@
+//----------------------------------------------------------------------------
+//! @file   ranged_attack_behavior.cpp
+//! @brief  遠距離攻撃行動（Elf用）実装
+//----------------------------------------------------------------------------
+#include "ranged_attack_behavior.h"
+#include "game/entities/elf.h"
+#include "game/entities/player.h"
+#include "game/entities/arrow_manager.h"
+#include "common/logging/logging.h"
+
+//----------------------------------------------------------------------------
+RangedAttackBehavior::RangedAttackBehavior(Elf* owner)
+    : owner_(owner)
+{
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::OnAttackStart(Individual* /*attacker*/, Individual* target)
+{
+    pendingTarget_ = target;
+    pendingTargetPlayer_ = nullptr;
+    arrowShot_ = false;
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::OnAttackStartPlayer(Individual* /*attacker*/, Player* target)
+{
+    pendingTarget_ = nullptr;
+    pendingTargetPlayer_ = target;
+    arrowShot_ = false;
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::OnAttackUpdate(float /*dt*/, AnimState /*phase*/, float /*phaseTime*/)
+{
+    // 更新処理は特になし（ダメージフレームでの処理のみ）
+}
+
+//----------------------------------------------------------------------------
+bool RangedAttackBehavior::OnDamageFrame()
+{
+    if (arrowShot_) {
+        return false;  // 既に発射済み
+    }
+
+    ShootArrow();
+    return arrowShot_;
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::OnAttackEnd()
+{
+    pendingTarget_ = nullptr;
+    pendingTargetPlayer_ = nullptr;
+    arrowShot_ = false;
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::OnAttackInterrupt()
+{
+    // 中断時も同様にクリア
+    OnAttackEnd();
+}
+
+//----------------------------------------------------------------------------
+float RangedAttackBehavior::GetWindupDuration() const
+{
+    // Elfは予備動作なし
+    return 0.0f;
+}
+
+//----------------------------------------------------------------------------
+float RangedAttackBehavior::GetActiveDuration() const
+{
+    // 3フレーム × 8F間隔
+    return kFrameInterval * kAttackFrames;
+}
+
+//----------------------------------------------------------------------------
+float RangedAttackBehavior::GetRecoveryDuration() const
+{
+    // 後隙
+    return 0.2f;
+}
+
+//----------------------------------------------------------------------------
+float RangedAttackBehavior::GetDamageFrameTime() const
+{
+    // フレーム1（0-indexed）で発射
+    return kFrameInterval * kShootFrame;
+}
+
+//----------------------------------------------------------------------------
+bool RangedAttackBehavior::GetTargetPosition(Vector2& outPosition) const
+{
+    if (pendingTarget_ && pendingTarget_->IsAlive()) {
+        outPosition = pendingTarget_->GetPosition();
+        return true;
+    }
+
+    if (pendingTargetPlayer_ && pendingTargetPlayer_->IsAlive()) {
+        outPosition = pendingTargetPlayer_->GetPosition();
+        return true;
+    }
+
+    return false;
+}
+
+//----------------------------------------------------------------------------
+void RangedAttackBehavior::ShootArrow()
+{
+    if (!owner_) return;
+
+    Vector2 startPos = owner_->GetPosition();
+    float damage = owner_->GetAttackDamage();
+
+    if (pendingTarget_ && pendingTarget_->IsAlive()) {
+        ArrowManager::Get().Shoot(owner_, pendingTarget_, startPos, damage);
+        LOG_INFO("[RangedAttack] " + owner_->GetId() + " shoots arrow at " + pendingTarget_->GetId());
+        arrowShot_ = true;
+    } else if (pendingTargetPlayer_ && pendingTargetPlayer_->IsAlive()) {
+        ArrowManager::Get().ShootAtPlayer(owner_, pendingTargetPlayer_, startPos, damage);
+        LOG_INFO("[RangedAttack] " + owner_->GetId() + " shoots arrow at Player");
+        arrowShot_ = true;
+    }
+}
