@@ -27,6 +27,8 @@
 #include "game/systems/bind_system.h"
 #include "game/systems/cut_system.h"
 #include "game/systems/combat_system.h"
+#include "game/systems/combat_mediator.h"
+#include "game/systems/relationship_context.h"
 #include "game/systems/game_state_manager.h"
 #include "game/systems/fe_system.h"
 #include "game/systems/stagger_system.h"
@@ -36,6 +38,7 @@
 #include "game/systems/event/game_events.h"
 #include "game/ui/radial_menu.h"
 #include "game/systems/love_bond_system.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/stage/stage_loader.h"
 #include <set>
 #include <unordered_map>
@@ -151,17 +154,15 @@ void TestScene::OnEnter()
     }
 
     // システム初期化
+    RelationshipContext::Get().Initialize();
+    RelationshipFacade::Get().Initialize();
+    RelationshipFacade::Get().SetPlayer(player_.get());
+    CombatMediator::Get().Initialize();
     CombatSystem::Get().SetPlayer(player_.get());
+    CombatMediator::Get().SetPlayer(player_.get());
     GameStateManager::Get().SetPlayer(player_.get());
     GameStateManager::Get().Initialize();
     FESystem::Get().SetPlayer(player_.get());
-
-    // FactionManagerにエンティティを登録
-    FactionManager::Get().ClearEntities();
-    FactionManager::Get().RegisterEntity(player_.get());
-    for (const auto& group : enemyGroups_) {
-        FactionManager::Get().RegisterEntity(group.get());
-    }
 
     // グループIDからGroupポインタを取得するマップ作成
     std::unordered_map<std::string, Group*> groupMap;
@@ -182,13 +183,17 @@ void TestScene::OnEnter()
             } else if (bd.type == "Love") {
                 bondType = BondType::Love;
             }
-            BondManager::Get().CreateBond(fromGroup, toGroup, bondType);
+            Bond* bond = BondManager::Get().CreateBond(fromGroup, toGroup, bondType);
+            if (bond) {
+                // RelationshipFacadeにも同期
+                RelationshipFacade::Get().Bind(fromGroup, toGroup, bondType);
+            } else {
+                LOG_WARN("[TestScene] Failed to create bond: " + bd.fromId + " <-> " + bd.toId +
+                         " (type=" + bd.type + ")");
+            }
         }
     }
     LOG_INFO("[TestScene] Bonds created: " + std::to_string(BondManager::Get().GetAllBonds().size()));
-
-    // Factionを再構築
-    FactionManager::Get().RebuildFactions();
 
     // AI状態変更コールバック設定
     for (size_t i = 0; i < groupAIs_.size(); ++i) {
@@ -209,14 +214,12 @@ void TestScene::OnEnter()
 
     BindSystem::Get().SetOnBondCreated([](const BondableEntity& a, const BondableEntity& b) {
         LOG_INFO("[TestScene] Bond created: " + BondableHelper::GetId(a) + " <-> " + BondableHelper::GetId(b));
-        FactionManager::Get().RebuildFactions();
-        LoveBondSystem::Get().RebuildLoveGroups();
+        // Note: RelationshipFacadeはBindSystem内で自動同期される
     });
 
     CutSystem::Get().SetOnBondCut([](const BondableEntity& a, const BondableEntity& b) {
         LOG_INFO("[TestScene] Bond cut: " + BondableHelper::GetId(a) + " <-> " + BondableHelper::GetId(b));
-        FactionManager::Get().RebuildFactions();
-        LoveBondSystem::Get().RebuildLoveGroups();
+        // Note: RelationshipFacadeはCutSystem内で自動同期される
     });
 
     // ラジアルメニュー初期化
@@ -239,16 +242,45 @@ void TestScene::OnEnter()
 
     // EventBus購読を設定
     SetupEventSubscriptions();
+
+    // 初期化完了フラグを設定
+    systemsInitialized_ = true;
 }
 
 //----------------------------------------------------------------------------
 void TestScene::OnExit()
 {
-    // EventBus購読解除
-    EventBus::Get().Clear();
-    eventSubscriptions_.clear();
+    // ========================================================================
+    // Phase 1: シングルトンのポインタをクリア（ダングリングポインタ防止）
+    // ========================================================================
+    CombatSystem::Get().SetPlayer(nullptr);
+    GameStateManager::Get().SetPlayer(nullptr);
+    FESystem::Get().SetPlayer(nullptr);
+    CombatMediator::Get().SetPlayer(nullptr);
+    LoveBondSystem::Get().SetPlayer(nullptr);
+    RelationshipFacade::Get().SetPlayer(nullptr);
 
-    // システムクリア
+    // GroupAIのポインタをクリア
+    for (std::unique_ptr<GroupAI>& ai : groupAIs_) {
+        if (ai) {
+            ai->SetPlayer(nullptr);
+            ai->SetCamera(nullptr);
+        }
+    }
+
+    // ========================================================================
+    // Phase 2: システムシャットダウン（イベント発行が必要な処理）
+    // ========================================================================
+    if (systemsInitialized_) {
+        CombatMediator::Get().Shutdown();
+        RelationshipContext::Get().Shutdown();
+        RelationshipFacade::Get().Shutdown();
+        systemsInitialized_ = false;
+    }
+
+    // ========================================================================
+    // Phase 3: システムキャッシュクリア
+    // ========================================================================
     ArrowManager::Get().Clear();
     CombatSystem::Get().ClearGroups();
     GameStateManager::Get().ClearEnemyGroups();
@@ -256,10 +288,14 @@ void TestScene::OnExit()
     StaggerSystem::Get().Clear();
     InsulationSystem::Get().Clear();
     FactionManager::Get().ClearEntities();
+    LoveBondSystem::Get().Clear();  // キャッシュクリア（ダングリングポインタ防止）
     BindSystem::Get().Disable();
     CutSystem::Get().Disable();
     TimeManager::Get().Resume();
 
+    // ========================================================================
+    // Phase 4: エンティティ削除
+    // ========================================================================
     groupAIs_.clear();
     enemyGroups_.clear();
 
@@ -271,6 +307,12 @@ void TestScene::OnExit()
     stageBackground_.Shutdown();
     cameraObj_.reset();
     whiteTexture_.reset();
+
+    // ========================================================================
+    // Phase 5: EventBusクリア（最後に実行）
+    // ========================================================================
+    eventSubscriptions_.clear();
+    EventBus::Get().Clear();
 }
 
 //----------------------------------------------------------------------------
@@ -551,10 +593,11 @@ void TestScene::BindPlayerToGroup(Group* group)
     Bond* bond = BondManager::Get().CreateBond(playerEntity, groupEntity, selectedBondType_);
 
     if (bond) {
+        // RelationshipFacadeにも同期
+        RelationshipFacade::Get().Bind(playerEntity, groupEntity, selectedBondType_);
+
         LOG_INFO("[TestScene] Player-Group bond created: " + group->GetId() +
                  " (Type: " + std::to_string(static_cast<int>(selectedBondType_)) + ")");
-        FactionManager::Get().RebuildFactions();
-        LoveBondSystem::Get().RebuildLoveGroups();
     }
 }
 
@@ -709,6 +752,7 @@ void TestScene::Render()
     DrawUI();
 
     // モード別オーバーレイ描画（画面全体に半透明）
+#ifdef _DEBUG
     if (BindSystem::Get().IsEnabled() || CutSystem::Get().IsEnabled()) {
         DebugDraw& debug = DebugDraw::Get();
         Vector2 cameraPos = camera_->GetPosition();
@@ -724,6 +768,7 @@ void TestScene::Render()
             debug.DrawRectFilled(cameraPos, overlaySize, Color(1.0f, 0.0f, 0.0f, 0.15f));
         }
     }
+#endif
 
     // ラジアルメニュー描画
     RadialMenu::Get().Render(spriteBatch);
@@ -962,7 +1007,7 @@ void TestScene::SetupEventSubscriptions()
             LOG_INFO("[EventBus] Bond created: " +
                      BondableHelper::GetId(e.entityA) + " <-> " +
                      BondableHelper::GetId(e.entityB));
-            FactionManager::Get().RebuildFactions();
+            // Note: RelationshipFacadeはBindSystem/CutSystem内で自動同期される
         })
     );
 
@@ -972,7 +1017,7 @@ void TestScene::SetupEventSubscriptions()
             LOG_INFO("[EventBus] Bond removed: " +
                      BondableHelper::GetId(e.entityA) + " <-> " +
                      BondableHelper::GetId(e.entityB));
-            FactionManager::Get().RebuildFactions();
+            // Note: RelationshipFacadeはBindSystem/CutSystem内で自動同期される
         })
     );
 
@@ -984,9 +1029,7 @@ void TestScene::SetupEventSubscriptions()
             // 全滅したグループの縁を全て削除
             BondableEntity entity = e.group;
             BondManager::Get().RemoveAllBondsFor(entity);
-
-            // 陣営再構築
-            FactionManager::Get().RebuildFactions();
+            RelationshipFacade::Get().CutAll(entity);
         })
     );
 

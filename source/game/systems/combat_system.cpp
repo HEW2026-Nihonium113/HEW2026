@@ -1,21 +1,39 @@
-//----------------------------------------------------------------------------
+﻿//----------------------------------------------------------------------------
 //! @file   combat_system.cpp
 //! @brief  戦闘システム実装
 //----------------------------------------------------------------------------
 #include "combat_system.h"
+#include "combat_mediator.h"
 #include "stagger_system.h"
-#include "faction_manager.h"
-#include "love_bond_system.h"
 #include "game_constants.h"
 #include "game/entities/group.h"
 #include "game/entities/individual.h"
 #include "game/entities/player.h"
-#include "game/bond/bond_manager.h"
-#include "game/bond/bond.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
 #include "common/logging/logging.h"
 #include <algorithm>
+
+//----------------------------------------------------------------------------
+CombatSystem::CombatSystem()
+{
+    // IndividualDiedEventを購読（attackTarget_クリア用）
+    individualDiedSubscriptionId_ = EventBus::Get().Subscribe<IndividualDiedEvent>(
+        [this](const IndividualDiedEvent& e) {
+            OnIndividualDied(e.individual);
+        });
+}
+
+//----------------------------------------------------------------------------
+CombatSystem::~CombatSystem()
+{
+    // イベント購読を解除
+    if (individualDiedSubscriptionId_ != 0) {
+        EventBus::Get().Unsubscribe<IndividualDiedEvent>(individualDiedSubscriptionId_);
+        individualDiedSubscriptionId_ = 0;
+    }
+}
 
 //----------------------------------------------------------------------------
 CombatSystem& CombatSystem::Get()
@@ -27,23 +45,23 @@ CombatSystem& CombatSystem::Get()
 //----------------------------------------------------------------------------
 void CombatSystem::Update(float dt)
 {
+    isUpdating_ = true;
+
     // コールバック中の変更に備えてコピーを作成
     std::vector<Group*> groupsCopy = groups_;
 
     // 各グループの個体クールダウン更新と戦闘処理
     for (Group* attacker : groupsCopy) {
-        if (!attacker || attacker->IsDefeated()) continue;
+        // 削除予約されたグループはスキップ
+        if (!attacker || attacker->IsDefeated() || IsPendingRemoval(attacker)) continue;
 
         // 全個体のクールダウン更新
         for (Individual* individual : attacker->GetAliveIndividuals()) {
             individual->UpdateAttackCooldown(dt);
         }
 
-        // 硬直中は攻撃しない
-        if (StaggerSystem::Get().IsStaggered(attacker)) continue;
-
-        // Love縁相手が遠い場合は攻撃しない（追従優先）
-        if (ShouldSkipCombatForLove(attacker)) continue;
+        // CombatMediatorに攻撃許可を確認（Stagger/Love/AIState全て含む）
+        if (!CombatMediator::Get().CanAttack(attacker)) continue;
 
         // 脅威度ベースでターゲット選定（グループ vs プレイヤー）
         Group* groupTarget = SelectTarget(attacker);
@@ -64,7 +82,10 @@ void CombatSystem::Update(float dt)
 
     // 全滅チェック（各グループにつき一度だけ処理）
     for (Group* group : groupsCopy) {
-        if (group && group->IsDefeated()) {
+        // 削除予約されたグループはスキップ
+        if (!group || IsPendingRemoval(group)) continue;
+
+        if (group->IsDefeated()) {
             // 既に処理済みならスキップ
             if (defeatedGroups_.count(group) > 0) continue;
 
@@ -82,6 +103,11 @@ void CombatSystem::Update(float dt)
             }
         }
     }
+
+    isUpdating_ = false;
+
+    // 遅延削除を実行
+    FlushPendingRemovals();
 }
 
 //----------------------------------------------------------------------------
@@ -99,6 +125,19 @@ void CombatSystem::RegisterGroup(Group* group)
 //----------------------------------------------------------------------------
 void CombatSystem::UnregisterGroup(Group* group)
 {
+    if (!group) return;
+
+    // Update中は遅延削除
+    if (isUpdating_) {
+        // 既に予約済みならスキップ
+        if (!IsPendingRemoval(group)) {
+            pendingRemovals_.push_back(group);
+            LOG_INFO("[CombatSystem] Group unregister deferred: " + group->GetId());
+        }
+        return;
+    }
+
+    // 即座に削除
     auto it = std::find(groups_.begin(), groups_.end(), group);
     if (it != groups_.end()) {
         groups_.erase(it);
@@ -110,8 +149,30 @@ void CombatSystem::UnregisterGroup(Group* group)
 void CombatSystem::ClearGroups()
 {
     groups_.clear();
+    pendingRemovals_.clear();
     defeatedGroups_.clear();
     LOG_INFO("[CombatSystem] All groups cleared");
+}
+
+//----------------------------------------------------------------------------
+void CombatSystem::FlushPendingRemovals()
+{
+    if (pendingRemovals_.empty()) return;
+
+    for (Group* group : pendingRemovals_) {
+        auto it = std::find(groups_.begin(), groups_.end(), group);
+        if (it != groups_.end()) {
+            groups_.erase(it);
+            LOG_INFO("[CombatSystem] Group unregistered (deferred): " + group->GetId());
+        }
+    }
+    pendingRemovals_.clear();
+}
+
+//----------------------------------------------------------------------------
+bool CombatSystem::IsPendingRemoval(Group* group) const
+{
+    return std::find(pendingRemovals_.begin(), pendingRemovals_.end(), group) != pendingRemovals_.end();
 }
 
 //----------------------------------------------------------------------------
@@ -169,11 +230,11 @@ bool CombatSystem::AreHostile(Group* a, Group* b) const
 {
     if (!a || !b) return false;
 
-    // FactionManagerで同一陣営判定（推移的接続を考慮）
+    // RelationshipFacadeで敵対判定（推移的接続を考慮）
     BondableEntity entityA = a;
     BondableEntity entityB = b;
 
-    return !FactionManager::Get().AreSameFaction(entityA, entityB);
+    return RelationshipFacade::Get().AreHostile(entityA, entityB);
 }
 
 //----------------------------------------------------------------------------
@@ -184,46 +245,7 @@ bool CombatSystem::IsHostileToPlayer(Group* group) const
     BondableEntity groupEntity = group;
     BondableEntity playerEntity = player_;
 
-    return !FactionManager::Get().AreSameFaction(groupEntity, playerEntity);
-}
-
-//----------------------------------------------------------------------------
-bool CombatSystem::ShouldSkipCombatForLove(Group* group) const
-{
-    if (!group) return false;
-
-    Vector2 groupPos = group->GetPosition();
-
-    // 設計意図: いずれかのLove縁相手が遠い場合は戦闘を中断し、追従を優先する
-    // これにより、Love縁で結ばれた仲間が離れ離れになることを防ぐ
-
-    // プレイヤーとのLove縁チェック（プレイヤーを最優先）
-    if (player_) {
-        BondableEntity groupEntity = group;
-        BondableEntity playerEntity = player_;
-        Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-        if (playerBond && playerBond->GetType() == BondType::Love) {
-            float dist = (player_->GetPosition() - groupPos).Length();
-            if (dist > GameConstants::kLoveInterruptDistance) {
-                return true;
-            }
-        }
-    }
-
-    // グループ同士のLove縁チェック（いずれかが遠い場合は追従優先）
-    std::vector<Group*> loveCluster = LoveBondSystem::Get().GetLoveCluster(group);
-    if (loveCluster.size() > 1) {
-        for (Group* partner : loveCluster) {
-            if (partner == group) continue;
-            if (!partner || partner->IsDefeated()) continue;  // null/全滅チェック
-            float dist = (partner->GetPosition() - groupPos).Length();
-            if (dist > GameConstants::kLoveInterruptDistance) {
-                return true;
-            }
-        }
-    }
-
-    return false;
+    return RelationshipFacade::Get().AreHostile(groupEntity, playerEntity);
 }
 
 //----------------------------------------------------------------------------
@@ -281,9 +303,6 @@ void CombatSystem::ProcessCombat(Group* attacker, Group* defender, float /*dt*/)
     float distance = (defenderPos - attackerPos).Length();
     float attackRange = attackerIndividual->GetAttackRange();
 
-    LOG_DEBUG("[ProcessCombat] " + attackerIndividual->GetId() + " -> " + defenderIndividual->GetId() +
-              " dist=" + std::to_string(distance) + " range=" + std::to_string(attackRange));
-
     if (distance > attackRange) {
         return; // 攻撃範囲外
     }
@@ -296,5 +315,25 @@ void CombatSystem::ProcessCombat(Group* attacker, Group* defender, float /*dt*/)
 
     if (onAttack_) {
         onAttack_(attackerIndividual, defenderIndividual, attackerIndividual->GetAttackDamage());
+    }
+}
+
+//----------------------------------------------------------------------------
+void CombatSystem::OnIndividualDied(Individual* diedIndividual)
+{
+    if (!diedIndividual) return;
+
+    // 全グループ内の全個体を走査し、死亡した個体をattackTarget_にしていればクリア
+    for (Group* group : groups_) {
+        if (!group || group->IsDefeated()) continue;
+
+        for (Individual* ind : group->GetAliveIndividuals()) {
+            if (!ind) continue;
+
+            // 死亡した個体をターゲットにしている場合はクリア
+            if (ind->GetAttackTarget() == diedIndividual) {
+                ind->SetAttackTarget(nullptr);
+            }
+        }
     }
 }

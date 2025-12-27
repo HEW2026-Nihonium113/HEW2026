@@ -129,4 +129,7 @@ private:
 
     //! @brief デバッグ描画表示フラグ（F1で切替）
     bool showDebugDraw_ = true;
+
+    //! @brief システム初期化完了フラグ（OnExit時のShutdown呼び出し制御用）
+    bool systemsInitialized_ = false;
 };

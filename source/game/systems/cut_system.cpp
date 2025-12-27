@@ -9,10 +9,31 @@
 #include "stagger_system.h"
 #include "insulation_system.h"
 #include "game/bond/bond_manager.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/entities/group.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
 #include "common/logging/logging.h"
+
+//----------------------------------------------------------------------------
+CutSystem::CutSystem()
+{
+    // BondRemovedEventを購読（選択中のBondが外部から削除された時にクリア）
+    bondRemovedSubscriptionId_ = EventBus::Get().Subscribe<BondRemovedEvent>(
+        [this](const BondRemovedEvent& e) {
+            OnBondRemoved(e.entityA, e.entityB);
+        });
+}
+
+//----------------------------------------------------------------------------
+CutSystem::~CutSystem()
+{
+    // イベント購読を解除
+    if (bondRemovedSubscriptionId_ != 0) {
+        EventBus::Get().Unsubscribe<BondRemovedEvent>(bondRemovedSubscriptionId_);
+        bondRemovedSubscriptionId_ = 0;
+    }
+}
 
 //----------------------------------------------------------------------------
 CutSystem& CutSystem::Get()
@@ -84,10 +105,13 @@ void CutSystem::SelectBond(Bond* bond)
     if (!isEnabled_ || !bond) return;
 
     selectedBond_ = bond;
+    // use-after-free防止: 選択時にエンティティをコピー
+    selectedEntityA_ = bond->GetEntityA();
+    selectedEntityB_ = bond->GetEntityB();
 
     LOG_INFO("[CutSystem] Bond selected: " +
-             BondableHelper::GetId(bond->GetEntityA()) + " <-> " +
-             BondableHelper::GetId(bond->GetEntityB()));
+             BondableHelper::GetId(selectedEntityA_) + " <-> " +
+             BondableHelper::GetId(selectedEntityB_));
 
     if (onBondSelected_) {
         onBondSelected_(bond);
@@ -121,9 +145,20 @@ bool CutSystem::CutBond(Bond* bond)
     BondableEntity a = bond->GetEntityA();
     BondableEntity b = bond->GetEntityB();
 
+    // 先にRelationshipFacadeから削除
+    bool cutSuccess = RelationshipFacade::Get().Cut(a, b);
+    if (!cutSuccess) {
+        // FEをリファンドして早期リターン
+        LOG_WARN("[CutSystem] Failed to cut from RelationshipFacade, rolling back");
+        FESystem::Get().Recover(cutCost_);
+        LOG_INFO("[CutSystem] Refunded " + std::to_string(cutCost_) + " FE");
+        return false;
+    }
+
     // 縁を削除
     bool removed = BondManager::Get().RemoveBond(bond);
     if (removed) {
+
         LOG_INFO("[CutSystem] Bond cut between " +
                  BondableHelper::GetId(a) + " and " + BondableHelper::GetId(b));
 
@@ -161,6 +196,8 @@ bool CutSystem::CutBond(Bond* bond)
 void CutSystem::ClearSelection()
 {
     selectedBond_ = nullptr;
+    selectedEntityA_ = static_cast<Player*>(nullptr);
+    selectedEntityB_ = static_cast<Player*>(nullptr);
 }
 
 //----------------------------------------------------------------------------
@@ -171,4 +208,21 @@ bool CutSystem::CanCut(Bond* bond) const
     // TODO: 追加の条件（例：特定の縁タイプは切れない等）
 
     return true;
+}
+
+//----------------------------------------------------------------------------
+void CutSystem::OnBondRemoved(const BondableEntity& a, const BondableEntity& b)
+{
+    // 選択中のBondが削除されたらクリア
+    if (!selectedBond_) return;
+
+    // use-after-free防止: 保存済みのエンティティIDで比較
+    // selectedBond_を直接参照しない（既に削除されている可能性があるため）
+    bool match = (selectedEntityA_ == a && selectedEntityB_ == b) ||
+                 (selectedEntityA_ == b && selectedEntityB_ == a);
+
+    if (match) {
+        LOG_INFO("[CutSystem] Selected bond was removed externally, clearing selection");
+        ClearSelection();
+    }
 }

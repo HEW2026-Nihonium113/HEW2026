@@ -5,6 +5,8 @@
 #include "group.h"
 #include "game/ai/group_ai.h"
 #include "game/systems/stagger_system.h"
+#include "game/systems/event/event_bus.h"
+#include "game/systems/event/game_events.h"
 #include "game/bond/bond_manager.h"
 #include "game/bond/bond.h"
 #include "engine/c_systems/sprite_batch.h"
@@ -17,6 +19,11 @@
 Group::Group(const std::string& id)
     : id_(id)
 {
+    // IndividualDiedEventを購読（所属個体死亡時にFormation再構築）
+    individualDiedSubscriptionId_ = EventBus::Get().Subscribe<IndividualDiedEvent>(
+        [this](const IndividualDiedEvent& e) {
+            OnIndividualDied(e.individual, e.ownerGroup);
+        });
 }
 
 //----------------------------------------------------------------------------
@@ -44,6 +51,12 @@ void Group::Initialize(const Vector2& centerPosition)
 //----------------------------------------------------------------------------
 void Group::Shutdown()
 {
+    // イベント購読を解除
+    if (individualDiedSubscriptionId_ != 0) {
+        EventBus::Get().Unsubscribe<IndividualDiedEvent>(individualDiedSubscriptionId_);
+        individualDiedSubscriptionId_ = 0;
+    }
+
     individuals_.clear();
     isDefeated_ = false;
 }
@@ -274,4 +287,16 @@ void Group::CheckDefeated()
             onDefeated_(this);
         }
     }
+}
+
+//----------------------------------------------------------------------------
+void Group::OnIndividualDied([[maybe_unused]] Individual* individual, Group* ownerGroup)
+{
+    // nullチェック + 自分のグループの個体が死亡した場合のみ処理
+    if (ownerGroup == nullptr || ownerGroup != this) return;
+
+    LOG_INFO("[Group] " + id_ + " individual died, rebuilding formation");
+
+    // Formationを再構築
+    RebuildFormation();
 }

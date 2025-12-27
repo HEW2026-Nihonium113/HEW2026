@@ -228,3 +228,16 @@ bool BondManager::AreTransitivelyConnected(const BondableEntity& a, const Bondab
 
     return false;
 }
+
+//----------------------------------------------------------------------------
+std::vector<Bond*> BondManager::GetAllBondsCopy() const
+{
+    std::vector<Bond*> result;
+    result.reserve(bonds_.size());
+
+    for (const std::unique_ptr<Bond>& bond : bonds_) {
+        result.push_back(bond.get());
+    }
+
+    return result;
+}

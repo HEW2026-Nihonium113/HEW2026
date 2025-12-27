@@ -8,6 +8,7 @@
 #include "fe_system.h"
 #include "insulation_system.h"
 #include "game/bond/bond_manager.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
 #include "common/logging/logging.h"
@@ -122,26 +123,38 @@ bool BindSystem::MarkEntity(BondableEntity entity)
 
     // 縁を作成（選択中のタイプで）
     Bond* bond = BondManager::Get().CreateBond(first, entity, pendingBondType_);
-    if (bond) {
-        LOG_INFO("[BindSystem] Bond created between " +
-                 BondableHelper::GetId(first) + " and " + BondableHelper::GetId(entity));
-
-        // EventBus通知
-        EventBus::Get().Publish(BondCreatedEvent{ first, entity, bond });
-
-        if (onBondCreated_) {
-            onBondCreated_(first, entity);
-        }
-
-        ClearMark();
-
-        // 縁作成後に自動でモード終了（時間再開）
-        Disable();
-
-        return true;
+    if (!bond) {
+        LOG_WARN("[BindSystem] Failed to create bond");
+        return false;
     }
 
-    return false;
+    // RelationshipFacadeにも同期
+    bool syncSuccess = RelationshipFacade::Get().Bind(first, entity, pendingBondType_);
+    if (!syncSuccess) {
+        // ロールバック: BondManagerから削除 + FEリファンド
+        LOG_WARN("[BindSystem] Failed to sync with RelationshipFacade, rolling back");
+        BondManager::Get().RemoveBond(bond);
+        FESystem::Get().Recover(bindCost_);
+        LOG_INFO("[BindSystem] Refunded " + std::to_string(bindCost_) + " FE");
+        return false;
+    }
+
+    LOG_INFO("[BindSystem] Bond created between " +
+             BondableHelper::GetId(first) + " and " + BondableHelper::GetId(entity));
+
+    // EventBus通知
+    EventBus::Get().Publish(BondCreatedEvent{ first, entity, bond });
+
+    if (onBondCreated_) {
+        onBondCreated_(first, entity);
+    }
+
+    ClearMark();
+
+    // 縁作成後に自動でモード終了（時間再開）
+    Disable();
+
+    return true;
 }
 
 //----------------------------------------------------------------------------

@@ -236,3 +236,12 @@ void LoveBondSystem::SyncClusterWanderTarget(const std::vector<Group*>& cluster)
     LOG_INFO("[LoveBondSystem] Synced wander target for cluster at (" +
              std::to_string(clusterCenter.x) + ", " + std::to_string(clusterCenter.y) + ")");
 }
+
+//----------------------------------------------------------------------------
+void LoveBondSystem::Clear()
+{
+    loveClusters_.clear();
+    clusterIndexCache_.clear();
+    player_ = nullptr;
+    LOG_INFO("[LoveBondSystem] Cleared all caches");
+}
