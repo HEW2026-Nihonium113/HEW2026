@@ -15,6 +15,7 @@ class Player;
 enum class AIState;
 struct AIStateChangedEvent;
 struct LoveFollowingChangedEvent;
+struct GroupDefeatedEvent;
 
 //----------------------------------------------------------------------------
 //! @brief 戦闘調整システム（Mediatorパターン）
@@ -61,6 +62,8 @@ private:
     ~CombatMediator() = default;
     CombatMediator(const CombatMediator&) = delete;
     CombatMediator& operator=(const CombatMediator&) = delete;
+    CombatMediator(CombatMediator&&) = delete;
+    CombatMediator& operator=(CombatMediator&&) = delete;
 
     //------------------------------------------------------------------------
     // EventBus購読ハンドラ
@@ -71,6 +74,9 @@ private:
 
     //! @brief Love追従状態変更イベントハンドラ
     void OnLoveFollowingChanged(const LoveFollowingChangedEvent& event);
+
+    //! @brief グループ全滅イベントハンドラ（ダングリングポインタ防止）
+    void OnGroupDefeated(const GroupDefeatedEvent& event);
 
     //------------------------------------------------------------------------
     // 内部処理
@@ -95,6 +101,7 @@ private:
     std::unordered_map<Group*, bool> loveFollowingFlags_;  //!< グループごとのLove追従フラグ
     Player* player_ = nullptr;                             //!< プレイヤー参照
 
-    uint32_t stateSubscriptionId_ = 0;  //!< AIStateChangedEvent購読ID
-    uint32_t loveSubscriptionId_ = 0;   //!< LoveFollowingChangedEvent購読ID
+    uint32_t stateSubscriptionId_ = 0;     //!< AIStateChangedEvent購読ID
+    uint32_t loveSubscriptionId_ = 0;      //!< LoveFollowingChangedEvent購読ID
+    uint32_t defeatedSubscriptionId_ = 0;  //!< GroupDefeatedEvent購読ID
 };

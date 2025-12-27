@@ -17,12 +17,20 @@ class Player;
 //! @details 攻撃関係を双方向クエリ可能にする
 //!          - attacker → target (誰を攻撃しているか)
 //!          - target → [attackers] (誰から攻撃されているか)
+//! @note ライフタイム管理: Initialize()でイベント購読開始、Shutdown()で解除
+//!       IndividualDiedEventを購読し、死亡時に自動的に関係を解除する
 //----------------------------------------------------------------------------
 class RelationshipContext
 {
 public:
     //! @brief シングルトンインスタンスを取得
     static RelationshipContext& Get();
+
+    //! @brief 初期化（EventBus購読開始）
+    void Initialize();
+
+    //! @brief 終了（EventBus購読解除、状態クリア）
+    void Shutdown();
 
     //------------------------------------------------------------------------
     // 攻撃関係の登録（IAttackBehaviorから呼び出し）
@@ -73,8 +81,8 @@ public:
     //! @brief 全関係をクリア
     void Clear();
 
-    //! @brief 死亡したエンティティを関係から除去
-    void RemoveDeadEntities();
+    //! @brief 特定の個体を全ての関係から除去（外部から明示的に呼ぶ場合用）
+    void RemoveIndividual(Individual* individual);
 
 private:
     RelationshipContext() = default;
@@ -82,15 +90,20 @@ private:
     RelationshipContext(const RelationshipContext&) = delete;
     RelationshipContext& operator=(const RelationshipContext&) = delete;
 
+    //! @brief 個体死亡イベントハンドラ
+    void OnIndividualDied(const struct IndividualDiedEvent& event);
+
     //! @brief attacker → target (Individual対象)
-    std::unordered_map<const Individual*, Individual*> attackerToTarget_;
+    std::unordered_map<Individual*, Individual*> attackerToTarget_;
 
     //! @brief attacker → target (Player対象)
-    std::unordered_map<const Individual*, Player*> attackerToPlayer_;
+    std::unordered_map<Individual*, Player*> attackerToPlayer_;
 
     //! @brief target → attackers (逆引き: Individualが攻撃されている)
-    std::unordered_map<const Individual*, std::unordered_set<Individual*>> targetToAttackers_;
+    std::unordered_map<Individual*, std::unordered_set<Individual*>> targetToAttackers_;
 
     //! @brief player → attackers (逆引き: Playerが攻撃されている)
-    std::unordered_map<const Player*, std::unordered_set<Individual*>> playerToAttackers_;
+    std::unordered_map<Player*, std::unordered_set<Individual*>> playerToAttackers_;
+
+    uint32_t diedSubscriptionId_ = 0;  //!< IndividualDiedEvent購読ID
 };

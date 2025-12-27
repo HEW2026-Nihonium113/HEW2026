@@ -40,6 +40,9 @@ public:
     //! @param owner 所有するGroup
     explicit GroupAI(Group* owner);
 
+    //! @brief デストラクタ（イベント購読解除）
+    ~GroupAI();
+
     //------------------------------------------------------------------------
     // 更新
     //------------------------------------------------------------------------
@@ -202,6 +205,12 @@ private:
 
     bool wasMoving_ = false;            //!< 前フレームの移動状態（変化検出用）
 
+    //! @brief GroupDefeatedEventの購読ID（解除用）
+    uint32_t defeatedSubscriptionId_ = 0;
+
     //! @brief 移動状態の変化を検出して個体に通知
     void NotifyMovementChange();
+
+    //! @brief グループ全滅イベントハンドラ（ターゲットクリア用）
+    void OnGroupDefeated(Group* defeatedGroup);
 };

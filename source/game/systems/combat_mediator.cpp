@@ -9,10 +9,8 @@
 #include "game/entities/player.h"
 #include "game/ai/group_ai.h"
 #include "game/systems/stagger_system.h"
-#include "game/systems/love_bond_system.h"
 #include "game/systems/game_constants.h"
-#include "game/bond/bond_manager.h"
-#include "game/bond/bond.h"
+#include "game/relationships/relationship_facade.h"
 #include "common/logging/logging.h"
 
 //----------------------------------------------------------------------------
@@ -33,6 +31,9 @@ void CombatMediator::Initialize()
     loveSubscriptionId_ = bus.Subscribe<LoveFollowingChangedEvent>(
         [this](const LoveFollowingChangedEvent& e) { OnLoveFollowingChanged(e); });
 
+    defeatedSubscriptionId_ = bus.Subscribe<GroupDefeatedEvent>(
+        [this](const GroupDefeatedEvent& e) { OnGroupDefeated(e); });
+
     LOG_INFO("[CombatMediator] Initialized");
 }
 
@@ -42,6 +43,7 @@ void CombatMediator::Shutdown()
     EventBus& bus = EventBus::Get();
     bus.Unsubscribe<AIStateChangedEvent>(stateSubscriptionId_);
     bus.Unsubscribe<LoveFollowingChangedEvent>(loveSubscriptionId_);
+    bus.Unsubscribe<GroupDefeatedEvent>(defeatedSubscriptionId_);
 
     std::unique_lock lock(mutex_);
     attackableGroups_.clear();
@@ -111,36 +113,47 @@ void CombatMediator::UpdateAttackPermission(Group* group)
     if (!group) return;
 
     bool canAttack = true;
+    AIState currentState = AIState::Wander;
+    bool isLoveFollowing = false;
 
-    // 1. Seek状態のみ攻撃可能（Wander/Fleeは不可）
+    // 1. 内部状態を単一ロックスコープで読み取り（TOCTOU防止）
     {
         std::shared_lock lock(mutex_);
+
+        // Seek状態のみ攻撃可能（Wander/Fleeは不可）
         auto stateIt = groupStates_.find(group);
-        if (stateIt == groupStates_.end() || stateIt->second != AIState::Seek) {
-            canAttack = false;
+        if (stateIt != groupStates_.end()) {
+            currentState = stateIt->second;
         }
-    }
 
-    // 2. Love追従中は攻撃不可
-    if (canAttack) {
-        std::shared_lock lock(mutex_);
+        // Love追従フラグを取得
         auto followIt = loveFollowingFlags_.find(group);
-        if (followIt != loveFollowingFlags_.end() && followIt->second) {
-            canAttack = false;
+        if (followIt != loveFollowingFlags_.end()) {
+            isLoveFollowing = followIt->second;
         }
     }
 
-    // 3. Love相手が遠い場合は攻撃不可
+    // 2. 読み取った値で判定
+    if (currentState != AIState::Seek) {
+        canAttack = false;
+    }
+
+    // 3. Love追従中は攻撃不可
+    if (canAttack && isLoveFollowing) {
+        canAttack = false;
+    }
+
+    // 4. Love相手が遠い場合は攻撃不可
     if (canAttack && CheckLoveDistance(group)) {
         canAttack = false;
     }
 
-    // 4. Stagger中は攻撃不可
+    // 5. Stagger中は攻撃不可
     if (canAttack && StaggerSystem::Get().IsStaggered(group)) {
         canAttack = false;
     }
 
-    // 攻撃許可リストを更新
+    // 6. 攻撃許可リストを更新
     {
         std::unique_lock lock(mutex_);
         if (canAttack) {
@@ -169,8 +182,8 @@ bool CombatMediator::CheckLoveDistance(Group* group) const
     if (player) {
         BondableEntity groupEntity = group;
         BondableEntity playerEntity = player;
-        Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-        if (playerBond && playerBond->GetType() == BondType::Love) {
+        const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+        if (edge && edge->type == BondType::Love) {
             float dist = (player->GetPosition() - groupPos).Length();
             if (dist > GameConstants::kLoveInterruptDistance) {
                 return true;
@@ -179,7 +192,7 @@ bool CombatMediator::CheckLoveDistance(Group* group) const
     }
 
     // グループ同士のLove縁チェック
-    std::vector<Group*> loveCluster = LoveBondSystem::Get().GetLoveCluster(group);
+    std::vector<Group*> loveCluster = RelationshipFacade::Get().GetLoveCluster(group);
     if (loveCluster.size() > 1) {
         for (Group* partner : loveCluster) {
             if (partner == group) continue;
@@ -192,4 +205,17 @@ bool CombatMediator::CheckLoveDistance(Group* group) const
     }
 
     return false;
+}
+
+//----------------------------------------------------------------------------
+void CombatMediator::OnGroupDefeated(const GroupDefeatedEvent& event)
+{
+    if (!event.group) return;
+
+    std::unique_lock lock(mutex_);
+    attackableGroups_.erase(event.group);
+    groupStates_.erase(event.group);
+    loveFollowingFlags_.erase(event.group);
+
+    LOG_DEBUG("[CombatMediator] Group removed: " + event.group->GetId());
 }

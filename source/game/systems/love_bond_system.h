@@ -70,6 +70,9 @@ public:
     //! @brief ラブクラスタの数を取得
     [[nodiscard]] size_t GetClusterCount() const { return loveClusters_.size(); }
 
+    //! @brief キャッシュをクリア（シーン終了時に呼び出し必須）
+    void Clear();
+
 private:
     LoveBondSystem() = default;
     ~LoveBondSystem() = default;

@@ -8,13 +8,11 @@
 #include "game/entities/player.h"
 #include "game/systems/stagger_system.h"
 #include "game/systems/combat_system.h"
-#include "game/systems/love_bond_system.h"
 #include "game/systems/time_manager.h"
 #include "game/systems/game_constants.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
-#include "game/bond/bond_manager.h"
-#include "game/bond/bond.h"
+#include "game/relationships/relationship_facade.h"
 #include "engine/component/camera2d.h"
 #include "common/logging/logging.h"
 #include <random>
@@ -32,6 +30,22 @@ GroupAI::GroupAI(Group* owner)
     : owner_(owner)
 {
     SetNewWanderTarget();
+
+    // GroupDefeatedEventを購読（ターゲットが倒された時にクリア）
+    defeatedSubscriptionId_ = EventBus::Get().Subscribe<GroupDefeatedEvent>(
+        [this](const GroupDefeatedEvent& e) {
+            OnGroupDefeated(e.group);
+        });
+}
+
+//----------------------------------------------------------------------------
+GroupAI::~GroupAI()
+{
+    // イベント購読を解除
+    if (defeatedSubscriptionId_ != 0) {
+        EventBus::Get().Unsubscribe<GroupDefeatedEvent>(defeatedSubscriptionId_);
+        defeatedSubscriptionId_ = 0;
+    }
 }
 
 //----------------------------------------------------------------------------
@@ -187,10 +201,10 @@ void GroupAI::FindTarget()
     if (!owner_) return;
 
     // ラブパートナーがいる場合は共有ターゲットを使用
-    LoveBondSystem& loveSys = LoveBondSystem::Get();
-    if (loveSys.HasLovePartners(owner_)) {
-        std::vector<Group*> cluster = loveSys.GetLoveCluster(owner_);
-        AITarget sharedTarget = loveSys.DetermineSharedTarget(cluster);
+    RelationshipFacade& facade = RelationshipFacade::Get();
+    if (facade.HasLovePartners(owner_)) {
+        std::vector<Group*> cluster = facade.GetLoveCluster(owner_);
+        AITarget sharedTarget = facade.DetermineSharedTarget(cluster);
 
         // 共有ターゲットを設定
         if (std::holds_alternative<Group*>(sharedTarget)) {
@@ -239,8 +253,8 @@ Vector2 GroupAI::GetTargetPosition() const
         if (player_) {
             BondableEntity groupEntity = owner_;
             BondableEntity playerEntity = player_;
-            Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-            if (playerBond && playerBond->GetType() == BondType::Love) {
+            const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+            if (edge && edge->type == BondType::Love) {
                 return player_->GetPosition();
             }
         }
@@ -281,11 +295,11 @@ void GroupAI::UpdateWander(float dt)
     if (player_) {
         BondableEntity groupEntity = owner_;
         BondableEntity playerEntity = player_;
-        Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-        if (playerBond) {
+        const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+        if (edge) {
             LOG_DEBUG("[UpdateWander] " + owner_->GetId() + " has bond with player, type=" +
-                      std::to_string(static_cast<int>(playerBond->GetType())) + " (2=Love)");
-            if (playerBond->GetType() == BondType::Love) {
+                      std::to_string(static_cast<int>(edge->type)) + " (2=Love)");
+            if (edge->type == BondType::Love) {
                 followPlayer = true;
             }
         }
@@ -342,7 +356,7 @@ void GroupAI::UpdateWander(float dt)
     }
 
     // ラブパートナー（グループ同士）がいる場合
-    std::vector<Group*> loveCluster = LoveBondSystem::Get().GetLoveCluster(owner_);
+    std::vector<Group*> loveCluster = RelationshipFacade::Get().GetLoveCluster(owner_);
     bool hasLovePartners = loveCluster.size() > 1;
 
     // グループ同士のLove縁：離れすぎたらお互いを追いかける
@@ -669,8 +683,8 @@ bool GroupAI::IsMoving() const
         if (player_) {
             BondableEntity groupEntity = owner_;
             BondableEntity playerEntity = player_;
-            Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-            if (playerBond && playerBond->GetType() == BondType::Love) {
+            const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+            if (edge && edge->type == BondType::Love) {
                 Vector2 playerPos = player_->GetPosition();
                 float playerDist = (playerPos - owner_->GetPosition()).Length();
                 return playerDist > GameConstants::kLoveFollowStartDistance;
@@ -678,7 +692,7 @@ bool GroupAI::IsMoving() const
         }
 
         // グループ同士のLove縁（クラスタ中心への移動）
-        std::vector<Group*> loveCluster = LoveBondSystem::Get().GetLoveCluster(owner_);
+        std::vector<Group*> loveCluster = RelationshipFacade::Get().GetLoveCluster(owner_);
         if (loveCluster.size() > 1) {
             // クラスタ中心を計算
             Vector2 clusterCenter = Vector2::Zero;
@@ -777,8 +791,8 @@ bool GroupAI::CheckLovePartnerDistance() const
     if (player_) {
         BondableEntity groupEntity = owner_;
         BondableEntity playerEntity = player_;
-        Bond* playerBond = BondManager::Get().GetBond(groupEntity, playerEntity);
-        if (playerBond && playerBond->GetType() == BondType::Love) {
+        const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+        if (edge && edge->type == BondType::Love) {
             float dist = (player_->GetPosition() - myPos).Length();
             if (dist > GameConstants::kLoveInterruptDistance) {
                 return true;
@@ -787,7 +801,7 @@ bool GroupAI::CheckLovePartnerDistance() const
     }
 
     // グループ同士のLove縁チェック
-    std::vector<Group*> loveCluster = LoveBondSystem::Get().GetLoveCluster(owner_);
+    std::vector<Group*> loveCluster = RelationshipFacade::Get().GetLoveCluster(owner_);
     if (loveCluster.size() > 1) {
         for (Group* partner : loveCluster) {
             if (partner == owner_) continue;
@@ -808,6 +822,20 @@ bool GroupAI::HasLoveBondWithPlayer() const
 
     BondableEntity groupEntity = owner_;
     BondableEntity playerEntity = player_;
-    Bond* bond = BondManager::Get().GetBond(groupEntity, playerEntity);
-    return bond && bond->GetType() == BondType::Love;
+    const EdgeData* edge = RelationshipFacade::Get().GetEdge(groupEntity, playerEntity);
+    return edge && edge->type == BondType::Love;
+}
+
+//----------------------------------------------------------------------------
+void GroupAI::OnGroupDefeated(Group* defeatedGroup)
+{
+    // ターゲットが倒されたグループならクリア
+    if (std::holds_alternative<Group*>(target_)) {
+        Group* currentTarget = std::get<Group*>(target_);
+        if (currentTarget == defeatedGroup) {
+            LOG_INFO("[GroupAI] " + (owner_ ? owner_->GetId() : "unknown") +
+                     " target defeated, clearing");
+            ClearTarget();
+        }
+    }
 }

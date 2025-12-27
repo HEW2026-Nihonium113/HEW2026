@@ -8,6 +8,7 @@
 #include "fe_system.h"
 #include "insulation_system.h"
 #include "game/bond/bond_manager.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
 #include "common/logging/logging.h"
@@ -123,6 +124,9 @@ bool BindSystem::MarkEntity(BondableEntity entity)
     // 縁を作成（選択中のタイプで）
     Bond* bond = BondManager::Get().CreateBond(first, entity, pendingBondType_);
     if (bond) {
+        // RelationshipFacadeにも同期
+        RelationshipFacade::Get().Bind(first, entity, pendingBondType_);
+
         LOG_INFO("[BindSystem] Bond created between " +
                  BondableHelper::GetId(first) + " and " + BondableHelper::GetId(entity));
 

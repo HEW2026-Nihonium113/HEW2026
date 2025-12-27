@@ -90,8 +90,8 @@ public:
     }
 
 private:
-    CombatSystem() = default;
-    ~CombatSystem() = default;
+    CombatSystem();
+    ~CombatSystem();
     CombatSystem(const CombatSystem&) = delete;
     CombatSystem& operator=(const CombatSystem&) = delete;
 
@@ -101,12 +101,26 @@ private:
     //! @brief グループ→プレイヤーの戦闘処理
     void ProcessCombatAgainstPlayer(Group* attacker, float dt);
 
-    std::vector<Group*> groups_;    //!< 登録されたグループ
-    std::set<Group*> defeatedGroups_;  //!< 既に全滅処理済みのグループ
-    Player* player_ = nullptr;      //!< プレイヤー参照
+    //! @brief 遅延削除を実行
+    void FlushPendingRemovals();
+
+    //! @brief グループが削除予約されているか判定
+    [[nodiscard]] bool IsPendingRemoval(Group* group) const;
+
+    //! @brief 個体死亡イベントハンドラ（attackTarget_クリア用）
+    void OnIndividualDied(Individual* diedIndividual);
+
+    std::vector<Group*> groups_;            //!< 登録されたグループ
+    std::vector<Group*> pendingRemovals_;   //!< 削除予約されたグループ
+    std::set<Group*> defeatedGroups_;       //!< 既に全滅処理済みのグループ
+    Player* player_ = nullptr;              //!< プレイヤー参照
+    bool isUpdating_ = false;               //!< Update中フラグ（TOCTOU防止）
 
     float attackInterval_ = 1.0f;   //!< 攻撃間隔（1.0秒）
     float attackTimer_ = 1.0f;      //!< 攻撃タイマー（初期値=間隔で即攻撃可能）
+
+    //! @brief IndividualDiedEventの購読ID
+    uint32_t individualDiedSubscriptionId_ = 0;
 
     // コールバック
     std::function<void(Individual*, Individual*, float)> onAttack_;

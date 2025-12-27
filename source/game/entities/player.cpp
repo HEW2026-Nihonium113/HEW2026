@@ -13,6 +13,7 @@
 #include "engine/c_systems/collision_layers.h"
 #include "game/systems/game_constants.h"
 #include "common/logging/logging.h"
+#include <cmath>
 
 //----------------------------------------------------------------------------
 Player::Player()
@@ -106,13 +107,26 @@ void Player::HandleInput(float dt, Camera2D& /*camera*/)
         transform_->Translate(move);
 
         // 移動方向に応じてスプライト反転（テクスチャは左向き）
-        if (sprite_ && move.x != 0.0f) {
-            sprite_->SetFlipX(move.x > 0.0f);
+        // 水平成分が30%以上の場合のみ反転（真上/真下への移動では反転しない）
+        if (sprite_) {
+            float absMoveX = std::abs(move.x);
+            float absMoveY = std::abs(move.y);
+            float total = absMoveX + absMoveY;
+            constexpr float kHorizontalThreshold = 0.3f;
+
+            if (total > 0.001f && absMoveX / total >= kHorizontalThreshold) {
+                sprite_->SetFlipX(move.x > 0.0f);
+            }
         }
     }
 
     // Love縁グループとの距離を常に制限（攻撃中でなくても）
+    // 複数のLove縁がある場合は、全ての制約を累積して平均化
     std::vector<Bond*> bonds = BondManager::Get().GetBondsFor(this);
+    Vector2 totalPull = Vector2::Zero;
+    int pullCount = 0;
+    Vector2 originalPlayerPos = transform_->GetPosition();
+
     for (Bond* bond : bonds) {
         if (bond->GetType() != BondType::Love) continue;
 
@@ -125,9 +139,8 @@ void Player::HandleInput(float dt, Camera2D& /*camera*/)
         Group* group = *groupPtr;
 
         // グループとの距離を制限
-        Vector2 playerPos = transform_->GetPosition();
         Vector2 groupPos = group->GetPosition();
-        Vector2 diff = playerPos - groupPos;
+        Vector2 diff = originalPlayerPos - groupPos;
         float distance = diff.Length();
 
         // ゼロ距離エッジケースを考慮
@@ -137,22 +150,29 @@ void Player::HandleInput(float dt, Camera2D& /*camera*/)
             diff.Normalize();
             Vector2 constrainedPos = groupPos + diff * GameConstants::kLoveInterruptDistance;
 
-            // 現在位置から制限位置への移動を滑らかに
-            Vector2 toConstrained = constrainedPos - playerPos;
-            float distToConstrained = toConstrained.Length();
+            // 現在位置から制限位置への引き戻しベクトルを累積
+            Vector2 toConstrained = constrainedPos - originalPlayerPos;
+            totalPull += toConstrained;
+            pullCount++;
+        }
+    }
 
-            // 最大移動速度（プレイヤーの移動速度より速め）
-            constexpr float kMaxPullSpeed = 400.0f;
-            float maxMove = kMaxPullSpeed * dt;
+    // 累積された引き戻しを平均化して適用
+    if (pullCount > 0) {
+        Vector2 averagePull = totalPull / static_cast<float>(pullCount);
+        float distToConstrained = averagePull.Length();
 
-            if (distToConstrained > maxMove) {
-                // 徐々に制限位置へ移動
-                toConstrained.Normalize();
-                transform_->SetPosition(playerPos + toConstrained * maxMove);
-            } else {
-                // 十分近いのでそのまま設定
-                transform_->SetPosition(constrainedPos);
-            }
+        // 最大移動速度（プレイヤーの移動速度より速め）
+        constexpr float kMaxPullSpeed = 400.0f;
+        float maxMove = kMaxPullSpeed * dt;
+
+        if (distToConstrained > maxMove) {
+            // 徐々に制限位置へ移動
+            averagePull.Normalize();
+            transform_->SetPosition(originalPlayerPos + averagePull * maxMove);
+        } else {
+            // 十分近いのでそのまま設定
+            transform_->SetPosition(originalPlayerPos + averagePull);
         }
     }
 }

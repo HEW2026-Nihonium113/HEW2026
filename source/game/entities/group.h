@@ -172,6 +172,9 @@ private:
     //! @brief 全滅チェックと通知
     void CheckDefeated();
 
+    //! @brief 個体死亡イベントハンドラ
+    void OnIndividualDied([[maybe_unused]] Individual* individual, Group* ownerGroup);
+
     // 識別
     std::string id_;
 
@@ -193,6 +196,9 @@ private:
 
     // AI参照（外部で管理）
     GroupAI* ai_ = nullptr;
+
+    //! @brief IndividualDiedEventの購読ID
+    uint32_t individualDiedSubscriptionId_ = 0;
 
     // コールバック
     std::function<void(Group*)> onDefeated_;

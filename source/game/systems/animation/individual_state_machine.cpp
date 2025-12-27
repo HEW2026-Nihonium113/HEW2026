@@ -364,14 +364,7 @@ void IndividualStateMachine::ApplyAnimatorRow(AnimState state)
 //----------------------------------------------------------------------------
 void IndividualStateMachine::FinishAttack()
 {
-    // 攻撃終了
-    if (attackBehavior_) {
-        attackBehavior_->OnAttackEnd();
-    }
-    if (onAttackEnd_) {
-        onAttackEnd_();
-    }
-
-    // Idle状態へ（次のUpdate()でWalk/Idleが適切に選択される）
+    // Idle状態へ遷移（ExitState()内でOnAttackEnd()が呼ばれる）
+    // 注意: ここで直接OnAttackEnd()を呼ぶとExitState()で二重呼び出しになる
     EnterState(AnimState::Idle);
 }

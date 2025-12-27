@@ -9,10 +9,31 @@
 #include "stagger_system.h"
 #include "insulation_system.h"
 #include "game/bond/bond_manager.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/entities/group.h"
 #include "game/systems/event/event_bus.h"
 #include "game/systems/event/game_events.h"
 #include "common/logging/logging.h"
+
+//----------------------------------------------------------------------------
+CutSystem::CutSystem()
+{
+    // BondRemovedEventを購読（選択中のBondが外部から削除された時にクリア）
+    bondRemovedSubscriptionId_ = EventBus::Get().Subscribe<BondRemovedEvent>(
+        [this](const BondRemovedEvent& e) {
+            OnBondRemoved(e.entityA, e.entityB);
+        });
+}
+
+//----------------------------------------------------------------------------
+CutSystem::~CutSystem()
+{
+    // イベント購読を解除
+    if (bondRemovedSubscriptionId_ != 0) {
+        EventBus::Get().Unsubscribe<BondRemovedEvent>(bondRemovedSubscriptionId_);
+        bondRemovedSubscriptionId_ = 0;
+    }
+}
 
 //----------------------------------------------------------------------------
 CutSystem& CutSystem::Get()
@@ -124,6 +145,9 @@ bool CutSystem::CutBond(Bond* bond)
     // 縁を削除
     bool removed = BondManager::Get().RemoveBond(bond);
     if (removed) {
+        // RelationshipFacadeにも同期
+        RelationshipFacade::Get().Cut(a, b);
+
         LOG_INFO("[CutSystem] Bond cut between " +
                  BondableHelper::GetId(a) + " and " + BondableHelper::GetId(b));
 
@@ -171,4 +195,23 @@ bool CutSystem::CanCut(Bond* bond) const
     // TODO: 追加の条件（例：特定の縁タイプは切れない等）
 
     return true;
+}
+
+//----------------------------------------------------------------------------
+void CutSystem::OnBondRemoved(const BondableEntity& a, const BondableEntity& b)
+{
+    // 選択中のBondが削除されたらクリア
+    if (!selectedBond_) return;
+
+    BondableEntity selectedA = selectedBond_->GetEntityA();
+    BondableEntity selectedB = selectedBond_->GetEntityB();
+
+    // 削除されたBondと選択中のBondが一致するかチェック
+    bool match = (selectedA == a && selectedB == b) ||
+                 (selectedA == b && selectedB == a);
+
+    if (match) {
+        LOG_INFO("[CutSystem] Selected bond was removed externally, clearing selection");
+        selectedBond_ = nullptr;
+    }
 }

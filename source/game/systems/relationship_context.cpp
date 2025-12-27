@@ -4,12 +4,28 @@
 //----------------------------------------------------------------------------
 #include "relationship_context.h"
 #include "game/entities/individual.h"
+#include "game/systems/event/event_bus.h"
+#include "game/systems/event/game_events.h"
 
 //----------------------------------------------------------------------------
 RelationshipContext& RelationshipContext::Get()
 {
     static RelationshipContext instance;
     return instance;
+}
+
+//----------------------------------------------------------------------------
+void RelationshipContext::Initialize()
+{
+    diedSubscriptionId_ = EventBus::Get().Subscribe<IndividualDiedEvent>(
+        [this](const IndividualDiedEvent& e) { OnIndividualDied(e); });
+}
+
+//----------------------------------------------------------------------------
+void RelationshipContext::Shutdown()
+{
+    EventBus::Get().Unsubscribe<IndividualDiedEvent>(diedSubscriptionId_);
+    Clear();
 }
 
 //----------------------------------------------------------------------------
@@ -75,14 +91,16 @@ void RelationshipContext::UnregisterAttack(Individual* attacker)
 //----------------------------------------------------------------------------
 Individual* RelationshipContext::GetAttackTarget(const Individual* attacker) const
 {
-    auto it = attackerToTarget_.find(attacker);
+    // const_cast: 読み取り専用のfind操作なので安全
+    auto it = attackerToTarget_.find(const_cast<Individual*>(attacker));
     return (it != attackerToTarget_.end()) ? it->second : nullptr;
 }
 
 //----------------------------------------------------------------------------
 Player* RelationshipContext::GetPlayerTarget(const Individual* attacker) const
 {
-    auto it = attackerToPlayer_.find(attacker);
+    // const_cast: 読み取り専用のfind操作なので安全
+    auto it = attackerToPlayer_.find(const_cast<Individual*>(attacker));
     return (it != attackerToPlayer_.end()) ? it->second : nullptr;
 }
 
@@ -90,7 +108,8 @@ Player* RelationshipContext::GetPlayerTarget(const Individual* attacker) const
 std::vector<Individual*> RelationshipContext::GetAttackers(const Individual* target) const
 {
     std::vector<Individual*> result;
-    auto it = targetToAttackers_.find(target);
+    // const_cast: 読み取り専用のfind操作なので安全
+    auto it = targetToAttackers_.find(const_cast<Individual*>(target));
     if (it != targetToAttackers_.end()) {
         result.reserve(it->second.size());
         for (Individual* attacker : it->second) {
@@ -103,7 +122,8 @@ std::vector<Individual*> RelationshipContext::GetAttackers(const Individual* tar
 //----------------------------------------------------------------------------
 bool RelationshipContext::IsUnderAttack(const Individual* target) const
 {
-    auto it = targetToAttackers_.find(target);
+    // const_cast: 読み取り専用のfind操作なので安全
+    auto it = targetToAttackers_.find(const_cast<Individual*>(target));
     return it != targetToAttackers_.end() && !it->second.empty();
 }
 
@@ -117,39 +137,27 @@ void RelationshipContext::Clear()
 }
 
 //----------------------------------------------------------------------------
-void RelationshipContext::RemoveDeadEntities()
+void RelationshipContext::OnIndividualDied(const IndividualDiedEvent& event)
 {
-    // 死亡した攻撃者を除去
-    std::vector<const Individual*> deadAttackers;
-    for (const auto& [attacker, target] : attackerToTarget_) {
-        if (!attacker->IsAlive()) {
-            deadAttackers.push_back(attacker);
-        }
-    }
-    for (const auto& [attacker, player] : attackerToPlayer_) {
-        if (!attacker->IsAlive()) {
-            deadAttackers.push_back(attacker);
-        }
-    }
-    for (const Individual* attacker : deadAttackers) {
-        UnregisterAttack(const_cast<Individual*>(attacker));
-    }
+    if (!event.individual) return;
+    RemoveIndividual(event.individual);
+}
 
-    // 死亡した対象のエントリを除去
-    std::vector<const Individual*> deadTargets;
-    for (const auto& [target, attackers] : targetToAttackers_) {
-        if (!target->IsAlive()) {
-            deadTargets.push_back(target);
+//----------------------------------------------------------------------------
+void RelationshipContext::RemoveIndividual(Individual* individual)
+{
+    if (!individual) return;
+
+    // この個体が攻撃者として登録されていれば解除
+    UnregisterAttack(individual);
+
+    // この個体が攻撃対象として登録されていれば、攻撃者側の関係も解除
+    auto it = targetToAttackers_.find(individual);
+    if (it != targetToAttackers_.end()) {
+        // この対象を攻撃している全員の攻撃関係を解除
+        for (Individual* attacker : it->second) {
+            attackerToTarget_.erase(attacker);
         }
-    }
-    for (const Individual* target : deadTargets) {
-        // この対象を攻撃している全員の関係を解除
-        auto it = targetToAttackers_.find(target);
-        if (it != targetToAttackers_.end()) {
-            for (Individual* attacker : it->second) {
-                attackerToTarget_.erase(attacker);
-            }
-            targetToAttackers_.erase(it);
-        }
+        targetToAttackers_.erase(it);
     }
 }

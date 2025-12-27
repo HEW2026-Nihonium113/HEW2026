@@ -24,7 +24,7 @@ struct AnimationDecisionContext
     //------------------------------------------------------------------------
     // 個体状態
     //------------------------------------------------------------------------
-    Vector2 velocity = Vector2::Zero;           //!< 実効速度 (desiredVelocity + separationOffset)
+    Vector2 velocity = Vector2::Zero;           //!< 実効速度（Individual側で計算済み）
     Vector2 desiredVelocity = Vector2::Zero;    //!< 希望速度
     float distanceToSlot = 0.0f;                //!< フォーメーションスロットまでの距離
     bool isActuallyMoving = false;              //!< 前フレームで実際に移動したか
@@ -62,8 +62,12 @@ struct AnimationDecisionContext
     //! @return Walk状態にすべきならtrue
     [[nodiscard]] bool ShouldWalk() const;
 
-    //! @brief 向くべき方向を取得
-    //! @return 向くべき方向（正規化されていない場合あり）
+    //! @brief 向くべき方向/対象を取得
+    //! @return 攻撃中: 攻撃対象の絶対位置（呼び出し側で方向計算が必要）
+    //!         移動中: 速度ベクトル（方向として使用可能）
+    //!         その他: 右向き(1,0)
+    //! @note 攻撃時は絶対位置を返すため、呼び出し側で
+    //!       (返り値 - 自身の位置).Normalized() で方向を計算すること
     [[nodiscard]] Vector2 GetFacingDirection() const;
 
     //------------------------------------------------------------------------
@@ -77,7 +81,4 @@ struct AnimationDecisionContext
 private:
     //! @brief 速度がこの値より大きければ移動中と判定
     static constexpr float kVelocityEpsilon = 2.0f;
-
-    //! @brief スロット距離がこの値より大きければ移動すべき
-    static constexpr float kSlotThreshold = 5.0f;
 };

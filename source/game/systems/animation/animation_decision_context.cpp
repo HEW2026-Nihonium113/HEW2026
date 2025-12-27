@@ -49,7 +49,8 @@ Vector2 AnimationDecisionContext::GetFacingDirection() const
     }
 
     // 移動中は速度方向
-    if (velocity.LengthSquared() > 0.01f) {
+    // ShouldWalk()と同じ閾値を使用して一貫性を保つ
+    if (velocity.LengthSquared() > kVelocityEpsilon * kVelocityEpsilon) {
         return velocity;
     }
 
@@ -63,6 +64,7 @@ std::string AnimationDecisionContext::ToString() const
     std::ostringstream oss;
     oss << "AnimationDecisionContext {\n";
     oss << "  velocity: (" << velocity.x << ", " << velocity.y << ")\n";
+    oss << "  desiredVelocity: (" << desiredVelocity.x << ", " << desiredVelocity.y << ")\n";
     oss << "  distanceToSlot: " << distanceToSlot << "\n";
     oss << "  isActuallyMoving: " << (isActuallyMoving ? "true" : "false") << "\n";
     oss << "  isGroupMoving: " << (isGroupMoving ? "true" : "false") << "\n";

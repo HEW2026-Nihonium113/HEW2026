@@ -62,8 +62,14 @@ public:
     //! @brief エンティティに関連する全ての縁を取得
     [[nodiscard]] std::vector<Bond*> GetBondsFor(const BondableEntity& entity) const;
 
-    //! @brief 全ての縁を取得
+    //! @brief 全ての縁を取得（参照版 - イテレーション中の変更禁止）
+    //! @warning イテレーション中にCreateBond()/RemoveBond()を呼ぶとクラッシュする可能性あり
+    //!          イテレーション中に変更の可能性がある場合はGetAllBondsCopy()を使用すること
     [[nodiscard]] const std::vector<std::unique_ptr<Bond>>& GetAllBonds() const { return bonds_; }
+
+    //! @brief 全ての縁を取得（コピー版 - イテレーション中の変更に安全）
+    //! @return 全ての縁へのポインタのコピー
+    [[nodiscard]] std::vector<Bond*> GetAllBondsCopy() const;
 
     //! @brief 縁の数を取得
     [[nodiscard]] size_t GetBondCount() const { return bonds_.size(); }

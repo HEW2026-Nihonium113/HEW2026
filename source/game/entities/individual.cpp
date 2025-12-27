@@ -10,8 +10,8 @@
 #include "game/systems/friends_damage_sharing.h"
 #include "game/systems/time_manager.h"
 #include "game/systems/relationship_context.h"
-#include "game/systems/love_bond_system.h"
 #include "game/systems/game_constants.h"
+#include "game/relationships/relationship_facade.h"
 #include "game/systems/movement/formation.h"
 #include "game/bond/bondable_entity.h"
 #include "game/systems/animation/anim_state.h"
@@ -737,6 +737,26 @@ void Individual::UpdateFacingDirection()
 {
     if (!sprite_) return;
 
+    // 向き変更の水平成分しきい値（この比率以上の水平成分がないと反転しない）
+    // 0.3 = 約±72度の範囲（水平から±36度）で反転
+    constexpr float kHorizontalThreshold = 0.3f;
+
+    // 水平成分が十分かチェックするヘルパー
+    auto shouldFlip = [](float dx, float dy) -> int {
+        float absDx = std::abs(dx);
+        float absDy = std::abs(dy);
+        float total = absDx + absDy;
+
+        // 移動量が微小な場合は反転しない
+        if (total < 0.001f) return 0;
+
+        // 水平成分の比率が閾値未満なら反転しない（真上/真下への移動）
+        if (absDx / total < kHorizontalThreshold) return 0;
+
+        // 水平成分が十分 → 反転方向を返す
+        return (dx > 0.0f) ? 1 : -1;
+    };
+
     IndividualIntent intent = GetIndividualIntent();
 
     // 1. 攻撃中はターゲット方向（仮想メソッドで派生クラス対応）
@@ -744,11 +764,10 @@ void Individual::UpdateFacingDirection()
         Vector2 targetPos;
         if (GetCurrentAttackTargetPosition(targetPos)) {
             float dx = targetPos.x - GetPosition().x;
-            if (dx > 0.0f) {
-                facingRight_ = true;
-            } else if (dx < 0.0f) {
-                facingRight_ = false;
-            }
+            float dy = targetPos.y - GetPosition().y;
+            int flipDir = shouldFlip(dx, dy);
+            if (flipDir > 0) facingRight_ = true;
+            else if (flipDir < 0) facingRight_ = false;
         }
     }
     // 2. グループ移動中はグループの移動先方向を向く（個体速度ではなくAIターゲット方向）
@@ -758,22 +777,20 @@ void Individual::UpdateFacingDirection()
             Vector2 targetPos = ai->GetTargetPosition();
             Vector2 groupPos = ownerGroup_->GetPosition();
             float dx = targetPos.x - groupPos.x;
-            if (dx > 0.0f) {
-                facingRight_ = true;
-            } else if (dx < 0.0f) {
-                facingRight_ = false;
-            }
+            float dy = targetPos.y - groupPos.y;
+            int flipDir = shouldFlip(dx, dy);
+            if (flipDir > 0) facingRight_ = true;
+            else if (flipDir < 0) facingRight_ = false;
         }
     }
     // 3. 実際に移動中（LovePull等）は移動方向を向く
     else if (isActuallyMoving_) {
         Vector2 currentPos = GetPosition();
         float dx = currentPos.x - prevPosition_.x;
-        if (dx > 0.0f) {
-            facingRight_ = true;
-        } else if (dx < 0.0f) {
-            facingRight_ = false;
-        }
+        float dy = currentPos.y - prevPosition_.y;
+        int flipDir = shouldFlip(dx, dy);
+        if (flipDir > 0) facingRight_ = true;
+        else if (flipDir < 0) facingRight_ = false;
     }
     // それ以外は現在の向きを維持
 
@@ -815,9 +832,9 @@ AnimationDecisionContext Individual::BuildAnimationContext() const
     //------------------------------------------------------------------------
     // Loveクラスター状態（関係性）
     //------------------------------------------------------------------------
-    ctx.isInLoveCluster = LoveBondSystem::Get().HasLovePartners(ownerGroup_);
+    ctx.isInLoveCluster = RelationshipFacade::Get().HasLovePartners(ownerGroup_);
     if (ctx.isInLoveCluster && ownerGroup_) {
-        std::vector<Group*> cluster = LoveBondSystem::Get().GetLoveCluster(ownerGroup_);
+        std::vector<Group*> cluster = RelationshipFacade::Get().GetLoveCluster(ownerGroup_);
 
         // クラスター中心を計算
         if (!cluster.empty()) {
